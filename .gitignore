@@ -27,3 +27,6 @@ samples/*.txt
 
 # Batch test output
 results/
+
+# CVs are personal data
+samples/cvs/

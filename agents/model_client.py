@@ -14,6 +14,7 @@ OLLAMA_URL = "http://localhost:11434"
 DEFAULT_CONTEXT_SIZE = 8192  # tokens
 DEFAULT_TEMPERATURE = 0.0  # 0 = always pick the most likely word: steady, repeatable output
 TIMEOUT_SECONDS = 120  # small local models can be slow, especially on first load
+CONTEXT_WARNING_SHARE = 0.8  # warn when a request fills more than 80% of the context
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = PROJECT_ROOT / ".env"
@@ -53,6 +54,11 @@ def _save_debug_payload(payload: dict) -> None:
     file.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def _estimate_tokens(messages: list[dict]) -> int:
+    """Rough token estimate: about 4 characters per token (more for German text or code)."""
+    return sum(len(message["content"]) for message in messages) // 4
+
+
 async def ask_model(
     prompt: str,
     model: str,
@@ -60,6 +66,7 @@ async def ask_model(
     json_schema: dict | None = None,
     num_ctx: int = DEFAULT_CONTEXT_SIZE,
     temperature: float = DEFAULT_TEMPERATURE,
+    timeout: float = TIMEOUT_SECONDS,
 ) -> str:
     """Send one prompt (plus optional system instructions) to Ollama and return the answer."""
     messages = []
@@ -80,18 +87,34 @@ async def ask_model(
 
     _save_debug_payload(payload)
 
+    # CONTEXT CHECK: Ollama silently drops text that doesn't fit into num_ctx.
+    # The answer also needs room in the context, so warn well before the limit.
+    estimate = _estimate_tokens(messages)
+    print(f"[model_client] {model}: request ~{estimate} tokens (context {num_ctx})")
+    if estimate > CONTEXT_WARNING_SHARE * num_ctx:
+        print(
+            f"[model_client] WARNING: request uses ~{estimate / num_ctx:.0%} of the context. "
+            "The model may silently lose part of the input."
+        )
+
     # MODEL CALL: plain HTTP POST to Ollama's chat endpoint.
     try:
-        async with httpx.AsyncClient(timeout=TIMEOUT_SECONDS) as client:
+        async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(f"{OLLAMA_URL}/api/chat", json=payload)
             response.raise_for_status()
     except httpx.ConnectError as e:
         raise ModelError(f"Cannot reach Ollama at {OLLAMA_URL}. Is it running?") from e
     except httpx.TimeoutException as e:
-        raise ModelError(f"Ollama did not answer within {TIMEOUT_SECONDS} seconds.") from e
+        raise ModelError(f"Ollama did not answer within {timeout:g} seconds.") from e
     except httpx.HTTPStatusError as e:
         raise ModelError(
             f"Ollama returned HTTP {e.response.status_code}: {e.response.text}"
         ) from e
 
-    return response.json()["message"]["content"]
+    body = response.json()
+    # Ollama reports the real token counts, so the estimate above can be checked.
+    print(
+        f"[model_client] {model}: real prompt tokens {body.get('prompt_eval_count')}, "
+        f"answer tokens {body.get('eval_count')}"
+    )
+    return body["message"]["content"]
