@@ -37,3 +37,20 @@
 ### "Add this to your CV" for confirmed items
 - **Problem:** items the user confirmed with "yes" but the CV doesn't mention are only listed as "confirmed by you", although a recruiter reading the CV won't see them.
 - **Possible fix:** list them in the report as "add this to your CV", ideally with a hint where it fits.
+
+### Company Research agent for paragraph 3 of the cover letter
+- **Problem:** paragraph 3 ("why this company") can only use the user's own answer, so it is often thin.
+- **Possible fix:** a fourth A2A agent that fetches the company's website and returns a few facts with their source URL, which the Cover Letter Writer may use like CV quotes.
+- **Risks:**
+  - **Invented company facts:** the model may summarise wrongly or add facts. Every fact would need an exact quote from the fetched page, checked in plain Python like the CV quotes.
+  - **Prompt injection:** a web page can contain hidden text such as "ignore your instructions". Page text must be treated as data, never as instructions, kept short, and never given to an agent that can take actions.
+
+## Cover Letter Writer
+
+### Sentences that are not in the claims list are never checked
+- **Problem:** the model writes the claims list itself, and some factual sentences in the letter are not on it (e.g. "defining clear data flows, integration standards and guardrails"), so they are never checked.
+- **Possible fix:** a sentence-by-sentence check: split the letter into sentences and require every factual sentence to map to a proven claim; rewrite or flag the ones that don't.
+
+### Paragraph 3 mixes in CV content
+- **Problem:** paragraph 3 ("why this company") should use only the user's answer, but the model adds CV skills to it.
+- **Possible fix:** write paragraph 3 in a separate model call that only receives the user's answer and the company name, so it cannot use anything else.

@@ -6,13 +6,10 @@ Instructions: prompts/cv_matcher.md. Checklist and questions: schema.py. Score: 
 Run with:  python -m agents.cv_matcher
 """
 
-import io
 import json
 
 import uvicorn
 from google.protobuf.json_format import MessageToDict
-from pypdf import PdfReader
-from pypdf.errors import PyPdfError
 from starlette.applications import Starlette
 
 from a2a.helpers import get_data_parts, new_data_part, new_task_from_user_message, new_text_part
@@ -39,6 +36,7 @@ from agents.cv_matcher.schema import (
     merge_answers,
 )
 from agents.cv_matcher.scoring import build_report
+from agents.cv_text import extract_pdf_text
 from agents.model_client import PROJECT_ROOT, ModelError, ask_model, read_setting
 
 HOST = "localhost"
@@ -47,7 +45,6 @@ URL = f"http://{HOST}:{PORT}"
 
 PROMPT_FILE = PROJECT_ROOT / "prompts" / "cv_matcher.md"
 MODEL_TIMEOUT_SECONDS = 300  # one call checks every requirement, which can take a while
-MIN_CV_CHARACTERS = 200  # less text than this means the PDF is probably a scanned image
 STATE_KEY = "cv_matcher_state"
 
 
@@ -78,21 +75,6 @@ AGENT_CARD = AgentCard(
         )
     ],
 )
-
-
-def extract_pdf_text(pdf_bytes: bytes) -> str:
-    """Plain-Python text extraction. Raises ValueError if no text can be read."""
-    try:
-        reader = PdfReader(io.BytesIO(pdf_bytes))
-        text = "\n".join(page.extract_text() or "" for page in reader.pages)
-    except PyPdfError as e:
-        raise ValueError(f"The file could not be read as a PDF: {e}") from e
-    if len(text.strip()) < MIN_CV_CHARACTERS:
-        raise ValueError(
-            "No text could be read from the PDF. It may be a scanned image; "
-            "please send a PDF with selectable text."
-        )
-    return text
 
 
 class CvMatcherExecutor(AgentExecutor):

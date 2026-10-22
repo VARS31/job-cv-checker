@@ -1,8 +1,7 @@
 """The CV Matcher's data: checklist from the job requirements, the model's JSON schema,
 the quote check, the yes/no questions, and merging the user's answers."""
 
-import re
-import unicodedata
+from agents.cv_text import quote_in_text
 
 NOT_STATED = "not_stated"
 REQUIRED, PREFERRED = "required", "preferred"
@@ -70,22 +69,6 @@ def checklist_as_text(checklist: list[dict]) -> str:
     return "\n".join(f"{i['id']} [{i['kind']}] {i['text']}" for i in checklist)
 
 
-def _normalize(text: str) -> str:
-    """Make text comparable: only words (keep + and # for C++, C#), lower case, single spaces."""
-    text = unicodedata.normalize("NFKC", text).lower()
-    return re.sub(r"[^\w+#]+", " ", text).strip()
-
-
-def quote_in_cv(quote: str, cv_text: str) -> bool:
-    """True if the quote's words appear in the CV in the same order.
-
-    Ignores case, line breaks and punctuation, so 'Microsoft Azure (App Service)'
-    matches the CV text 'Microsoft Azure (App Service, PostgreSQL)'.
-    """
-    quote = _normalize(quote)
-    return bool(quote) and f" {quote} " in f" {_normalize(cv_text)} "
-
-
 def apply_model_checks(checklist: list[dict], checks: list[dict], cv_text: str) -> list[dict]:
     """Combine the checklist with the model's answer. A "found" needs a real quote."""
     by_id = {c["id"]: c for c in checks}
@@ -99,7 +82,7 @@ def apply_model_checks(checklist: list[dict], checks: list[dict], cv_text: str) 
             status, quote = check["status"], check["quote"].strip()
             if status == FOUND and not quote:
                 status, note = UNCLEAR, "model said found but gave no quote"
-            elif status == FOUND and not quote_in_cv(quote, cv_text):
+            elif status == FOUND and not quote_in_text(quote, cv_text):
                 status, note = UNCLEAR, f"quote not found in CV: {quote!r}"
             if status != FOUND:
                 quote = ""

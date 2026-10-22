@@ -18,6 +18,8 @@ from a2a.helpers import get_data_parts, get_message_text, new_data_part, new_raw
 from a2a.types import Message, Role, SendMessageRequest, TaskState
 
 AGENT_URL = "http://localhost:9002"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+REPORTS_DIR = PROJECT_ROOT / "results" / "cv_matcher"
 
 raw_responses = []
 
@@ -130,7 +132,13 @@ async def main(requirements_file: Path, cv_file: Path) -> None:
 
         if task.status.state == TaskState.TASK_STATE_COMPLETED:
             # ARTIFACT: one DATA part with the report.
-            print_report(get_data_parts(task.artifacts[0].parts)[0])
+            report = get_data_parts(task.artifacts[0].parts)[0]
+            print_report(report)
+            # Save the report so the Cover Letter Writer test can use it.
+            REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+            report_file = REPORTS_DIR / f"{requirements_file.stem}__{cv_file.stem}.json"
+            report_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+            print(f"\nReport saved to {report_file.relative_to(PROJECT_ROOT)}")
         elif task.status.HasField("message"):
             print(f"Status message: {get_message_text(task.status.message)}")
 
