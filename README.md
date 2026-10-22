@@ -54,7 +54,7 @@ prompts/                 agent instructions (Markdown)
 scripts/                 test tools until the orchestrator exists
 samples/                 put your own job ads (*.txt) and CVs (cvs/*.pdf) here; not committed
 results/                 evaluation output; not committed
-docs/                    decisions, learning notes, model comparison, backlog
+docs/                    decisions, model comparison, backlog
 ```
 
 ## How to run

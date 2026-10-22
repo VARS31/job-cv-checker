@@ -30,3 +30,6 @@ results/
 
 # CVs are personal data
 samples/cvs/
+
+# Private learning notes (kept locally, never committed)
+docs/learning-notes.md
