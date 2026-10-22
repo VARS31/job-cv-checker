@@ -10,19 +10,27 @@
 - **Problem:** the half-finished analysis (`cv_matcher_state`) stays in `task.metadata` after the task is completed, so every client can still read it.
 - **Possible fix:** overwrite the key with an empty value in the final status update, or keep the state outside the task (e.g. in the agent's own store keyed by task id).
 
+### Items the CV lists plainly are marked "unclear"
+- **Problem:** in the demo run, the model marked SQL, PostgreSQL and CI/CD as "unclear" without a quote, although the CV lists all three word for word ("Python, SQL", "FastAPI and PostgreSQL", "GitHub Actions CI/CD"). Evidence rules 8 and 9 (no proof from bare skill lists) probably make it too cautious. A user who answers "no" by mistake turns them into "missing".
+- **Possible fix:** before asking, check in plain Python whether the requirement's exact words appear in the CV; if so, use that line as the quote and don't ask.
+
 ### Paused tasks are lost when the agent restarts
 - **Problem:** the in-memory task store forgets every task on restart, so answers to a paused task then fail with "task not found".
 - **Possible fix:** use the SDK's `DatabaseTaskStore` with SQLite (needs the `a2a-sdk[sqlite]` extra; ask before installing).
 
 ## Job Analyst
 
+### "Preferred" on experience and certificates is lost
+- **Problem:** on the non-AI ads, "*ideally* 2 years on a surgical ward" became a required `experience_details` item, and "Bilanzbuchhalter IHK *is a plus*" landed in `other_requirements`. Both read as required. The schema only has preferred *skills*, and the clean-up only checks `hard_skills_required`.
+- **Possible fix:** add `experience_preferred` and `other_preferred` fields (or a required flag per item), and run the "a plus" clean-up on every required list.
+
 ### "Such as A, B or C" alternatives become separate required items
 - **Problem:** "agentic AI frameworks such as LangGraph, CrewAI, AutoGen or OpenAI Agents SDK" becomes four required items, so a CV with one of them loses points for the other three.
 - **Possible fix:** a stronger prompt rule plus a worked example, or an "any of" group in the schema that the CV Matcher counts as one item.
 
-### Prompt tuned on 7 senior AI ads only
-- **Problem:** the prompt and the clean-up were only tested on 7 English ads for senior AI and architecture roles. Other job types and German markers like "von Vorteil", "wünschenswert" or "idealerweise" are untested.
-- **Possible fix:** add a few ads from other job types and in German to `samples/`, compare the results with the scorecard, and add German markers to the prompt and to `PREFERRED_MARKER` in `agents/job_analyst/schema.py`.
+### Prompt tested on few job types
+- **Problem:** the prompt and the clean-up were tuned on 7 English ads for senior AI roles and checked on only 3 short made-up non-AI ads (see the "Does it generalise?" section of the model comparison). German markers like "von Vorteil" worked for languages because the model handled them, but they are not in `PREFERRED_MARKER`, and "wünschenswert" or "idealerweise" are untested.
+- **Possible fix:** collect a few real ads from other job types and in German, score them with the same scorecard, and add German markers to the prompt and to `PREFERRED_MARKER` in `agents/job_analyst/schema.py`.
 
 ## Ideas
 
@@ -57,6 +65,20 @@
 
 ## Application Reviewer
 
+### Rank confirmed "no" answers and experience gaps highest
+- **Problem:** the reviewer's top 3 weaknesses don't follow a fixed priority, so a missing preferred item can outrank a required one the user explicitly said "no" to.
+- **Possible fix:** in the rubric (and checked in plain Python), rank user-confirmed "no" answers and missing required experience (years, experience details) first, then other required gaps, then everything else.
+
+### Reviewer false positives
+- **Problem:** the reviewer sometimes flags something true. In the demo run, it listed "no explicit mention of SQL" as a gap although the CV lists SQL, and flagged the candidate's own wish ("I want to build RAG assistants that real customers use") as an overclaim.
+- **Possible fix:** require each overclaim to come with a CV quote or report item that **contradicts** the sentence, checked in plain Python like the other quotes. Drop overclaims without a contradiction, and skip sentences that come from the user's own answer.
+
 ### Rewrite loop between reviewer and writer
 - **Idea:** the reviewer's overclaims and generic sentences go back to the Cover Letter Writer for a revised letter, for at most 2 rounds. The reviewer itself stays report-only.
 - **Risk:** each round costs one or two model calls and can drift away from the proven claims, so the claims check must run again after every rewrite.
+
+## Front end
+
+### Web page with live status (optional)
+- **Idea:** one plain HTML page instead of the terminal: upload a CV, paste an ad, answer the questions in the browser, and see each agent's status live.
+- **How:** use A2A streaming (`SendStreamingMessage`, server-sent events) so the page receives status updates and artifacts as they happen. The agents currently have `streaming=False` in their cards, so this needs streaming support in the agents and the orchestrator.

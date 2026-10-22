@@ -147,3 +147,40 @@ The in-between run also showed that **the clean-up matters**. Without it, MEDDPI
 Both are candidates for the next prompt rule.
 
 **Lesson:** after changing code, restart the agent, then check `agent_version` in the result files before comparing. Prompt changes apply right away, but code changes don't.
+
+---
+
+## Does it generalise? (non-AI job ads, 2026-10-22)
+
+All the tuning above was done on 7 senior AI and architecture ads. To see whether the Job Analyst also works for other jobs, I wrote 3 short **made-up** ads and ran only the Job Analyst on them, with the same prompt (rule 8 included) and agent 0.4.0 with `ministral-3:8b`. The ads are in `samples/demo/`: bartender, nurse and accountant. Each one contains things the scorecard tests: "or equivalent", "ideally", "a plus", a German "von Vorteil", certificates and travel.
+
+| Ad | Seniority guessed | Or-equivalent rule | Wrong field | Travel / certs | Vague / sentences | Invented | Seconds |
+|---|---|---|---|---|---|---|---|
+| Bartender | no (no signal) | n/a | 0 | cert: yes | 1 | 0 | 17.4 |
+| Nurse | no (no signal) | yes | 1 | cert: yes | 1 | 0 | 12.2 |
+| Accountant | no ("Senior" in the title, correctly "senior") | n/a | 1 | travel + cert: yes | 0 | 1 | 13.0 |
+| **Total** | **0 of 2** | **1 of 1** | **2** | **4 of 4** | **2** | **1** | **42.6 (14.2 per ad)** |
+
+**What worked:**
+- No guessed seniority. "Senior" in the accountant title was picked up correctly.
+- The "or an equivalent foreign qualification" wording was kept for the nurse.
+- All certificates (food hygiene, BLS, Bilanzbuchhalter) and the accountant's travel were captured.
+- "Deutschkenntnisse von Vorteil" became German = preferred, although no prompt rule mentions German markers.
+- Remote policy was right in all three: on-site, not stated, hybrid.
+- Skills were short items, and the responsibilities were short points.
+
+**What went wrong:**
+- **Nurse:** "*Ideally* 2 years on a surgical ward" became a plain `experience_details` item, which the CV Matcher treats as required. The schema has no way to mark experience as preferred.
+- **Accountant:** "Bilanzbuchhalter IHK *is a plus*" landed in `other_requirements`, which also reads as required. This is the same gap as "value-based selling" in v2: the plain-Python clean-up only moves "a plus" items out of `hard_skills_required`.
+- **Accountant:** German is required at level "very good", but the ad says "Fluent German". "Very good" belongs to the HGB line, so the level was taken from the wrong sentence. I counted it as invented.
+- **Nurse:** "Electronic patient record documentation" is a duty from the task list, but it was listed as a required hard skill. The ad's profile lists no hard skills at all, and the model filled the gap.
+- **Bartender:** one long item ("Valid food hygiene certificate (or commitment to obtain within 1 month)"). It's correct, and only counts because of the 10-word rule.
+
+**Compared with the 7 AI ads (v2):** the shape and the "never guess" rules hold. Vague items are rarer (0.7 per ad, against 1.7), mostly because these ads are short. Wrong-field errors are more frequent (2 in 3 ads, against 1 in 7): ads outside tech put "preferred" on experience and certificates rather than on skills, and the schema and the clean-up only handle preferred *skills*.
+
+**Honest limits of this test:**
+- There are only 3 ads.
+- I wrote them myself, knowing the scorecard. Real ads are longer and messier.
+- I scored them myself, with the same rules as above.
+
+Treat this as "the approach transfers, with known gaps", not as proof.

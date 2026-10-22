@@ -1,0 +1,28 @@
+Backend & AI Engineer (m/f/d) - Lumenpath Logistics, Hamburg
+(Fictional demo job ad. The company does not exist.)
+
+About us
+Lumenpath Logistics builds software that helps mid-sized freight companies plan and track their shipments. Our new AI team turns years of shipping data and support knowledge into tools our customers use every day.
+
+What you will do
+- Build and run Python services and REST APIs for our planning platform.
+- Develop LLM features, starting with a RAG assistant that answers customer questions from our documentation.
+- Measure and improve answer quality with evaluation sets.
+- Deploy services with Docker and CI/CD to the cloud.
+- Work with product managers and customers to shape new AI features.
+
+What you bring
+- 3+ years of professional experience as a backend engineer.
+- Strong Python and SQL; FastAPI or Django.
+- PostgreSQL and REST API design.
+- Hands-on experience with LLMs and retrieval-augmented generation (RAG).
+- Docker and CI/CD; experience with AWS or Azure.
+- Bachelor's degree in Computer Science or equivalent practical experience.
+- Fluent English.
+
+Nice to have
+- Kubernetes.
+- Experience with evaluation of LLM output.
+- German is a plus.
+
+Hybrid: 3 days per week in our Hamburg office. Occasional travel to customers (about 10%).
