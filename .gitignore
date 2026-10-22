@@ -21,3 +21,9 @@ dist/
 .DS_Store
 .vscode/
 .idea/
+
+# Your own job ads
+samples/*.txt
+
+# Batch test output
+results/
