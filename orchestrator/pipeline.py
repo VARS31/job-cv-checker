@@ -4,7 +4,7 @@ To add an agent (e.g. an Application Reviewer): write one more Step and append i
 Nothing else in the orchestrator needs to change.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable
 
 from a2a.helpers import get_data_parts, get_text_parts, new_data_part, new_raw_part, new_text_part
@@ -23,6 +23,8 @@ class Step:
     read_artifacts: Callable[[list[Artifact]], dict]
     # Result key -> file name in results/runs/<date-time>/ (dict/list as JSON, text as is).
     outputs: dict[str, str]
+    # Results -> short lines printed at the end of a successful run.
+    summary: Callable[[dict], list[str]] = field(default=lambda results: [])
 
 
 def _cv_part(results: dict) -> Part:
@@ -67,6 +69,7 @@ CV_MATCHER = Step(
     build_parts=lambda r: [_data(r, "requirements"), _cv_part(r)],
     read_artifacts=lambda artifacts: {"match_report": _first_data(artifacts)},
     outputs={"match_report": "match_report.json"},
+    summary=lambda r: [f"Match score: {r['match_report']['score_percent']:g}%"],
 )
 
 COVER_LETTER_WRITER = Step(
@@ -77,7 +80,39 @@ COVER_LETTER_WRITER = Step(
     build_parts=lambda r: [_data(r, "requirements"), _data(r, "match_report"), _cv_part(r)],
     read_artifacts=_letter,
     outputs={"cover_letter": "cover_letter.md", "letter_details": "claims.json"},
+    summary=lambda r: [
+        f"Cover letter: {r['letter_details']['word_count']:g} words, "
+        f"{len(r['letter_details']['unproven_claims'])} unproven claim(s)",
+        *[f"Style warning: {w}" for w in r["letter_details"]["style_warnings"]],
+    ],
+)
+
+
+def _review(artifacts: list[Artifact]) -> dict:
+    texts = [t for a in artifacts for t in get_text_parts(a.parts)]
+    if not texts:
+        raise ValueError("the agent's artifact has no text part")
+    return {"review": _first_data(artifacts), "review_md": texts[0]}
+
+
+APPLICATION_REVIEWER = Step(
+    name="Application Reviewer",
+    url_setting="APPLICATION_REVIEWER_URL",
+    default_url="http://localhost:9004",
+    start_command="python -m agents.application_reviewer",
+    build_parts=lambda r: [
+        _data(r, "requirements"),
+        _data(r, "match_report"),
+        new_text_part(r["cover_letter"]),  # TEXT PART: the letter
+        _cv_part(r),
+    ],
+    read_artifacts=_review,
+    outputs={"review": "review.json", "review_md": "review.md"},
+    summary=lambda r: [
+        f"Verdict: {r['review']['verdict']['decision']} ({r['review']['verdict']['reason']})",
+        f"Overclaims in the letter: {len(r['review']['overclaims'])}",
+    ],
 )
 
 # Fixed routing: always this order.
-STEPS = [JOB_ANALYST, CV_MATCHER, COVER_LETTER_WRITER]
+STEPS = [JOB_ANALYST, CV_MATCHER, COVER_LETTER_WRITER, APPLICATION_REVIEWER]

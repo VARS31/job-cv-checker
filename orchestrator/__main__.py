@@ -1,6 +1,7 @@
 """Orchestrator: runs the whole pipeline with one command.
 
-Fixed routing: Job Analyst -> CV Matcher -> Cover Letter Writer (see pipeline.py).
+Fixed routing: Job Analyst -> CV Matcher -> Cover Letter Writer -> Application Reviewer
+(see pipeline.py).
 
 Run with:  python -m orchestrator samples/job_ad_1.txt samples/cvs/my_cv.pdf
 (start the agents first:  python scripts/start_agents.py)
@@ -69,16 +70,10 @@ async def run(job_ad_file: Path, cv_file: Path) -> int:
 
 
 def print_summary(results: dict, run_store: RunStore) -> None:
-    report = results.get("match_report", {})
-    details = results.get("letter_details", {})
     print(f"\n✓ Done. Everything is saved in {run_store.relative_dir}/")
-    if report:
-        print(f"  Match score: {report['score_percent']:g}%  ({report['summary'].split('.')[0]}.)")
-    if details:
-        print(f"  Cover letter: {run_store.relative_dir}/cover_letter.md  ({details['word_count']:g} words)")
-        print(f"  Unproven claims to review: {len(details['unproven_claims'])}")
-        for warning in details["style_warnings"]:
-            print(f"  Style warning: {warning}")
+    for step in STEPS:  # each step decides what it wants to show
+        for line in step.summary(results):
+            print(f"  {line}")
 
 
 def main() -> None:

@@ -1,4 +1,4 @@
-"""Start all three agents in one terminal; Ctrl+C stops them all.
+"""Start all agents in one terminal; Ctrl+C stops them all.
 
 Run with:  python scripts/start_agents.py
 Uses only the Python standard library (subprocess, threading, urllib).
@@ -17,6 +17,7 @@ AGENTS = [
     ("job_analyst", "agents.job_analyst", "http://localhost:9001"),
     ("cv_matcher", "agents.cv_matcher", "http://localhost:9002"),
     ("cover_letter", "agents.cover_letter_writer", "http://localhost:9003"),
+    ("reviewer", "agents.application_reviewer", "http://localhost:9004"),
 ]
 READY_TIMEOUT_SECONDS = 30
 

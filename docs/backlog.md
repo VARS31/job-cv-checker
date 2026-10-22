@@ -55,14 +55,8 @@
 - **Problem:** paragraph 3 ("why this company") should use only the user's answer, but the model adds CV skills to it.
 - **Possible fix:** write paragraph 3 in a separate model call that only receives the user's answer and the company name, so it cannot use anything else.
 
-## Next agents
+## Application Reviewer
 
-### Application Reviewer agent
-- **Idea:** a fourth agent that reviews the whole application like a senior recruiter, using a fixed rubric.
-- **Model:** `granite4.1:8b`. A different model than the writer, so it doesn't share the writer's blind spots, and it scored 0 invented facts in the Job Analyst comparison.
-- **Output:** a verdict (e.g. strong / possible / weak), the top 3 weaknesses of the application, feedback on the cover letter, and likely interview questions.
-- **How to add it:** one new step in `orchestrator/pipeline.py`, after the Cover Letter Writer, receiving the requirements, the match report and the letter.
-
-### Later: rewrite loop between reviewer and writer
-- **Idea:** the reviewer's letter feedback goes back to the Cover Letter Writer for a revised letter, for at most 2 rounds.
+### Rewrite loop between reviewer and writer
+- **Idea:** the reviewer's overclaims and generic sentences go back to the Cover Letter Writer for a revised letter, for at most 2 rounds. The reviewer itself stays report-only.
 - **Risk:** each round costs one or two model calls and can drift away from the proven claims, so the claims check must run again after every rewrite.
