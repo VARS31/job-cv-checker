@@ -40,7 +40,7 @@ PROMPT_FILE = PROJECT_ROOT / "prompts" / "job_analyst.md"
 AGENT_CARD = AgentCard(
     name="Job Analyst",
     description="Reads a job ad and pulls out the key requirements.",
-    version="0.3.0",
+    version="0.4.0",
     # Where and how to talk to this agent: JSON-RPC over HTTP, A2A protocol 1.0.
     supported_interfaces=[
         AgentInterface(url=URL, protocol_binding="JSONRPC", protocol_version="1.0")

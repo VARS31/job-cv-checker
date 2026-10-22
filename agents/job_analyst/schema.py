@@ -1,6 +1,17 @@
 """The Job Analyst's output contract: the JSON schema, plus clean-up after the model answers."""
 
+import re
+
 NOT_STATED = "not_stated"
+
+# Words that mean "preferred". An item in a required list containing one of these
+# is moved to the matching preferred list, and the marker is removed from its text.
+PREFERRED_MARKER = re.compile(
+    r"\(\s*preferred\s*\)|\b(?:is\s+)?a\s+plus\b|\bnice[\s-]to[\s-]have\b|\bideally\b",
+    re.IGNORECASE,
+)
+# Required list -> matching preferred list.
+REQUIRED_TO_PREFERRED = {"hard_skills_required": "hard_skills_preferred"}
 
 
 def _text(description: str) -> dict:
@@ -75,8 +86,25 @@ LIST_FIELDS = [
 ]
 
 
+def _remove_marker(item: str) -> str:
+    """'MEDDPICC (preferred)' -> 'MEDDPICC'; 'Docker is a plus' -> 'Docker'."""
+    item = PREFERRED_MARKER.sub("", item)
+    item = re.sub(r"\(\s*\)", "", item)  # empty brackets left behind
+    return re.sub(r"\s+", " ", item).strip(" ,;:-")
+
+
 def clean_requirements(data: dict) -> dict:
-    """Trim spaces and remove duplicates within and across fields (plain Python, no model)."""
+    """Fix required/preferred markers, trim spaces, remove duplicates (plain Python, no model)."""
+    # Items marked as preferred move out of the required list.
+    for required, preferred in REQUIRED_TO_PREFERRED.items():
+        keep = []
+        for item in data[required]:
+            if PREFERRED_MARKER.search(item):
+                data[preferred].append(_remove_marker(item))
+            else:
+                keep.append(item)
+        data[required] = keep
+
     for field in TEXT_FIELDS:
         data[field] = data[field].strip() or NOT_STATED
 

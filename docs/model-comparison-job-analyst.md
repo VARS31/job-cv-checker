@@ -98,3 +98,52 @@ In simple words: it makes the fewest mistakes that matter for the next agent.
 
   "X or Y" alternatives are not counted, because the prompt asks to keep them together.
 - **Invented fact:** a stated fact that is not in the ad. Seniority guesses are counted separately.
+
+---
+
+## v2: ministral-3:8b after two fixes (2026-10-22)
+
+**What changed since v1:**
+1. **Prompt rule 8:** only list languages the ad explicitly mentions; the language the ad is written in doesn't count.
+2. **Clean-up code (agent 0.4.0):** an item in `hard_skills_required` containing "(preferred)", "a plus", "nice to have" or "ideally" moves to `hard_skills_preferred`, and the marker is removed.
+
+**The run:** all 7 result files say `agent_version: 0.4.0`, so both fixes were active. The prompt copy in `results/ministral-3_8b/job_analyst.md` contains rule 8.
+
+Folders compared: `results/ministral-3_8b_prompt_v1/` (v1) and `results/ministral-3_8b/` (v2).
+
+| Scorecard | v1 | v2 |
+|---|---|---|
+| Seniority guessed without a signal | 1 of 6 | **0 of 6** |
+| "Or equivalent experience" rule followed | 3 of 3 | 3 of 3 |
+| Required vs preferred: items in the wrong field | 1 | 1 |
+| Travel and certifications captured | 3 of 3 | 3 of 3 |
+| Vague items or full sentences | 12 | 12 |
+| Invented facts | 2 | **0** |
+| Seconds, total (average per ad) | 153.8 (22.0) | 153.6 (21.9) |
+
+**Check of the clean-up, before this run:** an earlier run had the new prompt but the old code (the agent hadn't been restarted, so files said `0.3.0`). I ran the new `clean_requirements()` over those saved results, without changing any files. The prediction was that the clean-up would change exactly one item, MEDDPICC in ad 4.
+
+The real 0.4.0 run matches that prediction item for item. The model's answers were identical in both runs, as expected at temperature 0, and the clean-up changed only MEDDPICC.
+
+The in-between run also showed that **the clean-up matters**. Without it, MEDDPICC stayed under required, so the wrong-field count was 2, not 1.
+
+**What improved:**
+- **Languages (the target of fix 1):** ads 3 and 4 no longer list "English, required". Invented facts went from 2 to 0.
+- **MEDDPICC (the target of fix 2):** in ad 4 the model still wrote "MEDDPICC or similar sales qualification frameworks (preferred)" under required. The clean-up moved it to preferred and removed "(preferred)". This was the only item the clean-up changed in all 7 ads.
+- **Seniority, as a side effect:** ad 3 now says `not_stated` instead of a guessed "senior". The prompt change was about languages, so this is a lucky side effect, not a reliable fix.
+
+**What got worse or stayed the same:**
+- **New wrong-field item:** ad 4 now captures "value-based selling" (which v1 had dropped). But it put it under `other_requirements` instead of `hard_skills_preferred`. The ad calls it "a plus", and `other_requirements` reads as required. So the wrong-field count is still 1, but it is a different item from v1's. The clean-up can't catch this one, because the item carries no "a plus" marker and only required lists are checked.
+- **Ad 3:** the model moved two items into `other_requirements` that don't belong there:
+  - the full-stack debugging skill, which is a required hard skill;
+  - "Support multi-stage deployments", which is a duty.
+- **Vague items:** unchanged at 12. Ad 6 still puts 4 duties into `soft_skills`.
+- **Other wording:** responsibilities, locations and some item wording changed in ads 2–7. Any prompt change shifts the model's output a little, even at temperature 0. Most of these changes are neutral.
+
+**Conclusion:** both fixes did what they were meant to, and v2 is better than v1 overall: no invented facts, no guessed seniority. The remaining weak spots are:
+- skills or duties landing in `other_requirements`;
+- duties landing in `soft_skills`.
+
+Both are candidates for the next prompt rule.
+
+**Lesson:** after changing code, restart the agent, then check `agent_version` in the result files before comparing. Prompt changes apply right away, but code changes don't.
