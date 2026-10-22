@@ -56,7 +56,7 @@ STATE_KEY = "cv_matcher_state"
 AGENT_CARD = AgentCard(
     name="CV Matcher",
     description="Compares a CV with a job's requirements and asks yes/no questions when unsure.",
-    version="0.1.0",
+    version="0.2.0",
     supported_interfaces=[
         AgentInterface(url=URL, protocol_binding="JSONRPC", protocol_version="1.0")
     ],
@@ -215,6 +215,8 @@ class CvMatcherExecutor(AgentExecutor):
     async def _finish(self, updater: TaskUpdater, requirements: dict, analysis: list[dict]) -> None:
         # SCORE CALCULATED (inside build_report, plain Python).
         report = build_report(requirements, analysis)
+        # Which code produced this result (same as the agent card version).
+        report["agent_version"] = AGENT_CARD.version
         # ARTIFACT: one DATA part with the report.
         await updater.add_artifact(
             [new_data_part(report, media_type="application/json")], name="cv_match_report"

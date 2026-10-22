@@ -1,6 +1,6 @@
 """Test the CV Matcher: send requirements + a CV, answer its questions, print the report.
 
-Run with:  python scripts/test_cv_matcher.py results/ministral-3_8b/job_ad_1.json samples/cvs/cv_vyron.pdf
+Run with:  python scripts/test_cv_matcher.py results/ministral-3_8b/job_ad_1.json samples/cvs/my_cv.pdf
 (the CV Matcher must be running on port 9002)
 """
 
@@ -67,6 +67,7 @@ async def send(client, message: Message):
 
 def print_report(report: dict) -> None:
     print(f"\n===== Match report: {report['job_title']} ({report['company']}) =====")
+    print(f"CV Matcher version: {report.get('agent_version', 'unknown')}")
     # Numbers arrive as floats (protobuf), so :g prints 66 instead of 66.0.
     print(f"Score: {report['score_percent']:g}%  ({report['points']:g} of {report['max_points']:g} points)\n")
     print("Matched (with proof from the CV):")

@@ -107,9 +107,21 @@ def apply_model_checks(checklist: list[dict], checks: list[dict], cv_text: str) 
     return analysis
 
 
+# Question priority: years/experience first, then education, then required hard skills,
+# then everything else (languages, other requirements).
+QUESTION_PRIORITY = {
+    "min_years_experience": 0,
+    "experience_details": 0,
+    "education_required": 1,
+    "hard_skills_required": 2,
+}
+
+
 def build_questions(analysis: list[dict]) -> list[dict]:
-    """Up to 5 yes/no questions, one per unclear REQUIRED item."""
+    """Up to 5 yes/no questions, one per unclear REQUIRED item, most important first."""
     unclear = [i for i in analysis if i["kind"] == REQUIRED and i["status"] == UNCLEAR]
+    # sorted() keeps the checklist order within each priority group.
+    unclear = sorted(unclear, key=lambda i: QUESTION_PRIORITY.get(i["source"], 3))
     return [
         {"id": f"q{n}", "item_id": item["id"], "question": f"Does this apply to you: {item['text']}?"}
         for n, item in enumerate(unclear[:MAX_QUESTIONS], start=1)
