@@ -1,5 +1,7 @@
 # Model comparison: Job Analyst (2026-10-22)
 
+> **Later:** local vs Claude Haiku on the same ads, with this scorecard, is in [comparison-local-vs-haiku.md](comparison-local-vs-haiku.md) (2026-11-08).
+
 Three local models, same prompt (`prompts/job_analyst.md`, identical copy in each results folder), same 7 job ads in `samples/`, agent version 0.3.0, temperature 0. Every run finished with `TASK_STATE_COMPLETED`.
 
 - `llama3.2:3b` → `results/llama3.2_3b/`

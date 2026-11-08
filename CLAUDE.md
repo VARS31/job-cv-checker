@@ -4,12 +4,13 @@
 
 A "job ad and CV checker" built as a learning project for the A2A protocol and multi-agent systems.
 
-- **3 A2A agents:**
-  - **Job Analyst** – reads a job ad and pulls out the key requirements.
-  - **CV Matcher** – compares the CV to those requirements and asks the user yes/no questions via the A2A `input-required` state.
-  - **Cover Letter Writer** – writes a cover letter from the results.
+- **4 A2A agents** (ports 9001–9004):
+  - **Job Analyst** (9001) – reads a job ad and pulls out the key requirements.
+  - **CV Matcher** (9002) – compares the CV to those requirements and asks the user yes/no questions via the A2A `input-required` state.
+  - **Cover Letter Writer** (9003) – writes a cover letter from the results.
+  - **Application Reviewer** (9004) – reviews the whole application like a recruiter; reports only, never rewrites.
 - **Orchestrator:** a Python program with fixed (hard-coded) routing between the agents.
-- **Models:** local models via Ollama (`http://localhost:11434`).
+- **Models:** local by default via Ollama (`OLLAMA_URL` in `.env`); Claude Haiku optional per agent (see Constraints). The model belongs to the agent: each agent reads its model at startup and reports it in its result metadata.
 - **Later:** one plain HTML page as a simple front end.
 
 ## Working mode
@@ -24,11 +25,13 @@ A "job ad and CV checker" built as a learning project for the A2A protocol and m
 - Explain every new file in simple words.
 - When unsure about a library's API, read the installed package's source code (in `.venv`) instead of guessing from memory.
 - The A2A SDK 1.x differs a lot from 0.3: do not rely on 0.3 examples or memory; check the installed version.
+- Tests: `python -m pytest` (plain-Python logic only: no models, no network, no personal files). Run them before and after every change.
 
 ## Constraints
 
 - Python 3.11.
 - Virtual environment in `.venv`.
-- No paid APIs.
-- Agents run on ports 9001–9003.
-- All model calls go through one model-client module.
+- **Local by default, cloud optional.** Paid APIs only as an explicit opt-in per agent (a `claude-...` model name, or `scripts/start_agents.py --preset haiku`), never as a silent fallback. Every paid call goes through the budget guard (`agents/budget.py`, limits in `.env`). Never open, print or log `ANTHROPIC_API_KEY`.
+- With a Claude model, the job ad and the CV text are sent to Anthropic. Measuring runs (model comparisons) use only the fictional demo CV in `samples/demo/`, never a real CV.
+- Agents run on ports 9001–9004.
+- All model calls go through one model-client module (`agents/model_client.py`).

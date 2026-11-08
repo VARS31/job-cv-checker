@@ -1,7 +1,8 @@
 """PIPELINE STEPS: the fixed order of agents, what each one receives, and what it returns.
 
-To add an agent (e.g. an Application Reviewer): write one more Step and append it to STEPS.
-Nothing else in the orchestrator needs to change.
+Job Analyst -> CV Matcher -> Cover Letter Writer -> Application Reviewer.
+To add an agent: write one more Step and append it to STEPS (the Application Reviewer was added
+this way). Nothing else in the orchestrator needs to change.
 """
 
 from dataclasses import dataclass, field
