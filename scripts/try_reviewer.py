@@ -1,6 +1,6 @@
 """Review an existing pipeline run with the Application Reviewer, without rerunning the pipeline.
 
-Run with:  python scripts/test_reviewer.py results/runs/<date-time> [cv.pdf]
+Run with:  python scripts/try_reviewer.py results/runs/<date-time> [cv.pdf]
 (the Application Reviewer must be running on port 9004)
 
 The CV is taken from samples/cvs/<name in run_log.json>, unless you pass a path.
@@ -97,5 +97,5 @@ async def main(run_dir: Path, cv_file: Path | None) -> None:
 
 if __name__ == "__main__":
     if len(sys.argv) not in (2, 3):
-        sys.exit("Usage: python scripts/test_reviewer.py <run-folder> [cv.pdf]")
+        sys.exit("Usage: python scripts/try_reviewer.py <run-folder> [cv.pdf]")
     asyncio.run(main(Path(sys.argv[1]), Path(sys.argv[2]) if len(sys.argv) == 3 else None))

@@ -2,7 +2,7 @@
 print the letter and the checked claims.
 
 Run with:
-  python scripts/test_cover_letter.py results/ministral-3_8b/job_ad_1.json \
+  python scripts/try_cover_letter.py results/ministral-3_8b/job_ad_1.json \
       results/cv_matcher/job_ad_1__my_cv.json samples/cvs/my_cv.pdf
 (the Cover Letter Writer must be running on port 9003)
 """
@@ -128,5 +128,5 @@ async def main(requirements_file: Path, report_file: Path, cv_file: Path) -> Non
 
 if __name__ == "__main__":
     if len(sys.argv) != 4:
-        sys.exit("Usage: python scripts/test_cover_letter.py <requirements.json> <cv_matcher_report.json> <cv.pdf>")
+        sys.exit("Usage: python scripts/try_cover_letter.py <requirements.json> <cv_matcher_report.json> <cv.pdf>")
     asyncio.run(main(Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])))

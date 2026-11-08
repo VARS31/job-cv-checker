@@ -110,17 +110,17 @@ The orchestrator prints one progress line per agent, asks the CV Matcher's yes/n
 
 ```bash
 python -m agents.job_analyst                                   # terminal 1: agent on :9001
-python scripts/send_test_message.py samples/my_job_ad.txt      # terminal 2: one ad
+python scripts/try_job_analyst.py samples/my_job_ad.txt      # terminal 2: one ad
 python -m scripts.run_all_samples                              # terminal 2: all ads → results/<model>/
 
 python -m agents.cv_matcher                                    # agent on :9002
-python scripts/test_cv_matcher.py results/ministral-3_8b/my_job_ad.json samples/cvs/my_cv.pdf
+python scripts/try_cv_matcher.py results/ministral-3_8b/my_job_ad.json samples/cvs/my_cv.pdf
 
 python -m agents.cover_letter_writer                           # agent on :9003
-python scripts/test_cover_letter.py results/ministral-3_8b/my_job_ad.json results/cv_matcher/my_job_ad__my_cv.json samples/cvs/my_cv.pdf
+python scripts/try_cover_letter.py results/ministral-3_8b/my_job_ad.json results/cv_matcher/my_job_ad__my_cv.json samples/cvs/my_cv.pdf
 
 python -m agents.application_reviewer                          # agent on :9004
-python scripts/test_reviewer.py results/runs/<date-time>       # review an existing run again
+python scripts/try_reviewer.py results/runs/<date-time>       # review an existing run again
 ```
 
 These test scripts print the raw A2A JSON of each step. You can see an agent card in the browser at http://localhost:9001/.well-known/agent-card.json (or `:9002`, `:9003`, `:9004`).

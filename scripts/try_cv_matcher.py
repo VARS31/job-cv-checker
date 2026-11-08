@@ -1,6 +1,6 @@
 """Test the CV Matcher: send requirements + a CV, answer its questions, print the report.
 
-Run with:  python scripts/test_cv_matcher.py results/ministral-3_8b/job_ad_1.json samples/cvs/my_cv.pdf
+Run with:  python scripts/try_cv_matcher.py results/ministral-3_8b/job_ad_1.json samples/cvs/my_cv.pdf
 (the CV Matcher must be running on port 9002)
 """
 
@@ -145,5 +145,5 @@ async def main(requirements_file: Path, cv_file: Path) -> None:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        sys.exit("Usage: python scripts/test_cv_matcher.py <job_analyst_result.json> <cv.pdf>")
+        sys.exit("Usage: python scripts/try_cv_matcher.py <job_analyst_result.json> <cv.pdf>")
     asyncio.run(main(Path(sys.argv[1]), Path(sys.argv[2])))

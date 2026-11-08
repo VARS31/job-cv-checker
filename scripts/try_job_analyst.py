@@ -1,6 +1,6 @@
 """Send one job ad to the Job Analyst and print what comes back.
 
-Run with:  python scripts/send_test_message.py samples/job_ad_1.txt   (the agent must be running)
+Run with:  python scripts/try_job_analyst.py samples/job_ad_1.txt   (the agent must be running)
 """
 
 import asyncio
@@ -73,5 +73,5 @@ async def main(job_ad: str) -> None:
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        sys.exit("Usage: python scripts/send_test_message.py <job_ad_file.txt>")
+        sys.exit("Usage: python scripts/try_job_analyst.py <job_ad_file.txt>")
     asyncio.run(main(Path(sys.argv[1]).read_text(encoding="utf-8")))

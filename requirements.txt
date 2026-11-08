@@ -1,3 +1,6 @@
 a2a-sdk[http-server]==1.2.3
 uvicorn==0.54.0
 pypdf==6.21.2
+
+# Tests (plain-Python logic only): python -m pytest
+pytest==9.2.0
