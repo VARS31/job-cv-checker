@@ -1,6 +1,10 @@
 a2a-sdk[http-server]==1.2.3
 uvicorn==0.54.0
 pypdf==6.21.2
+httpx==0.28.1  # used directly by the model client (Ollama) and the orchestrator
+
+# Optional cloud models (Claude). Only used when an agent's model name starts with "claude-".
+anthropic==2.6.0
 
 # Tests (plain-Python logic only): python -m pytest
 pytest==9.2.0

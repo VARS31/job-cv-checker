@@ -28,7 +28,15 @@ from agents.application_reviewer.schema import (
     ground_review,
 )
 from agents.cv_text import extract_pdf_text
-from agents.model_client import PROJECT_ROOT, ModelError, ask_model, read_setting
+from agents.model_client import (
+    PROJECT_ROOT,
+    USAGE_KEY,
+    ModelError,
+    Usage,
+    ask_model,
+    read_setting,
+    startup_check,
+)
 
 HOST = "localhost"
 PORT = 9004
@@ -43,7 +51,7 @@ MODEL_TIMEOUT_SECONDS = 300
 AGENT_CARD = AgentCard(
     name="Application Reviewer",
     description="Reviews a job application like a senior recruiter. Reports only; never rewrites the letter.",
-    version="0.1.0",
+    version="0.2.0",
     supported_interfaces=[
         AgentInterface(url=URL, protocol_binding="JSONRPC", protocol_version="1.0")
     ],
@@ -104,11 +112,13 @@ class ApplicationReviewerExecutor(AgentExecutor):
             return
 
         await updater.start_work()  # STATUS: working
+        # USAGE: tokens, cost and time of this task's model call, sent back as result metadata.
+        usage = Usage(self.model)
         try:
             cv_text = extract_pdf_text(pdf_parts[0].raw)
-            review = await self._review(requirements, report, letter, cv_text)
+            review = await self._review(requirements, report, letter, cv_text, usage, context.context_id)
         except (ModelError, ValueError) as error:
-            await self._fail(updater, str(error))
+            await self._fail(updater, str(error), usage)
             return
 
         review["agent_version"] = AGENT_CARD.version
@@ -122,12 +132,16 @@ class ApplicationReviewerExecutor(AgentExecutor):
                 new_text_part(review_md, media_type="text/markdown"),
             ],
             name="application_review",
+            # The artifact's METADATA says which model produced it and what it cost.
+            metadata={USAGE_KEY: usage.as_metadata()},
         )
         await updater.complete()  # STATUS: completed
 
-    async def _review(self, requirements: dict, report: dict, letter: str, cv_text: str) -> dict:
+    async def _review(
+        self, requirements: dict, report: dict, letter: str, cv_text: str, usage: Usage, run_id: str
+    ) -> dict:
         instructions = PROMPT_FILE.read_text(encoding="utf-8")
-        # MODEL CALL (through the shared model client), schema-enforced, temperature 0.
+        # MODEL CALL (through the shared model client), schema-enforced, temperature 0 on Ollama.
         answer = await ask_model(
             build_model_input(requirements, report, letter, cv_text),
             self.model,
@@ -135,6 +149,8 @@ class ApplicationReviewerExecutor(AgentExecutor):
             json_schema=REVIEW_SCHEMA,
             temperature=0.0,
             timeout=MODEL_TIMEOUT_SECONDS,
+            usage=usage,
+            run_id=run_id,
         )
         try:
             review = json.loads(answer)
@@ -145,17 +161,21 @@ class ApplicationReviewerExecutor(AgentExecutor):
         # CLICHÉ CHECK: plain-Python safety net for known clichés the model missed.
         return add_known_cliches(review, letter)
 
-    async def _fail(self, updater: TaskUpdater, error: str) -> None:
-        # FAILED STATUS: final state, with the error as a text message.
-        await updater.failed(updater.new_agent_message([new_text_part(f"Application Reviewer failed: {error}")]))
+    async def _fail(self, updater: TaskUpdater, error: str, usage: Usage | None = None) -> None:
+        # FAILED STATUS: final state, with the error as a text message (and the usage so far, if any).
+        metadata = {USAGE_KEY: usage.as_metadata()} if usage else None
+        await updater.failed(
+            updater.new_agent_message([new_text_part(f"Application Reviewer failed: {error}")], metadata=metadata)
+        )
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
         raise UnsupportedOperationError()
 
 
 def main() -> None:
+    # The model belongs to the agent: read once at startup, checked before the server starts.
     model = read_setting("REVIEWER_MODEL")
-    print(f"Application Reviewer using model: {model}")
+    startup_check("Application Reviewer", model)
     handler = DefaultRequestHandler(
         agent_executor=ApplicationReviewerExecutor(model),
         task_store=InMemoryTaskStore(),

@@ -38,14 +38,22 @@ from agents.cover_letter_writer.schema import (
     style_warnings,
 )
 from agents.cv_text import extract_pdf_text
-from agents.model_client import PROJECT_ROOT, ModelError, ask_model, read_setting
+from agents.model_client import (
+    PROJECT_ROOT,
+    USAGE_KEY,
+    ModelError,
+    Usage,
+    ask_model,
+    read_setting,
+    startup_check,
+)
 
 HOST = "localhost"
 PORT = 9003
 URL = f"http://{HOST}:{PORT}"
 
 PROMPT_FILE = PROJECT_ROOT / "prompts" / "cover_letter_writer.md"
-WRITING_TEMPERATURE = 0.4  # a little variation helps writing; facts are checked afterwards
+WRITING_TEMPERATURE = 0.4  # a little variation helps writing; facts are checked afterwards (Ollama only)
 MODEL_TIMEOUT_SECONDS = 300
 STATE_KEY = "cover_letter_state"
 
@@ -55,7 +63,7 @@ STATE_KEY = "cover_letter_state"
 AGENT_CARD = AgentCard(
     name="Cover Letter Writer",
     description="Writes an honest cover letter from the job requirements, the CV match report and the CV.",
-    version="0.2.0",
+    version="0.3.0",
     supported_interfaces=[
         AgentInterface(url=URL, protocol_binding="JSONRPC", protocol_version="1.0")
     ],
@@ -152,10 +160,12 @@ class CoverLetterExecutor(AgentExecutor):
             return
 
         await updater.start_work()  # STATUS: working again
+        # USAGE: tokens, cost and time of this task's model calls (one, or two with the rewrite).
+        usage = Usage(self.model)
         try:
-            result = await self._write_letter(state, answer)
+            result = await self._write_letter(state, answer, usage, context.context_id)
         except (ModelError, ValueError) as error:
-            await self._fail(updater, str(error))
+            await self._fail(updater, str(error), usage)
             return
 
         # ARTIFACT: the letter as a TEXT part, the checked claims as a DATA part.
@@ -165,12 +175,14 @@ class CoverLetterExecutor(AgentExecutor):
                 new_data_part(result["details"], media_type="application/json"),
             ],
             name="cover_letter",
+            # The artifact's METADATA says which model produced it and what it cost.
+            metadata={USAGE_KEY: usage.as_metadata()},
         )
         await updater.complete()  # STATUS: completed
 
-    async def _ask_model(self, user_message: str) -> tuple[str, list[dict]]:
+    async def _ask_model(self, user_message: str, usage: Usage, run_id: str) -> tuple[str, list[dict]]:
         instructions = PROMPT_FILE.read_text(encoding="utf-8")
-        # MODEL CALL (through the shared model client), schema-enforced, temperature 0.4.
+        # MODEL CALL (through the shared model client), schema-enforced, temperature 0.4 on Ollama.
         answer = await ask_model(
             user_message,
             self.model,
@@ -178,6 +190,8 @@ class CoverLetterExecutor(AgentExecutor):
             json_schema=LETTER_SCHEMA,
             temperature=WRITING_TEMPERATURE,
             timeout=MODEL_TIMEOUT_SECONDS,
+            usage=usage,
+            run_id=run_id,
         )
         try:
             data = json.loads(answer)
@@ -186,11 +200,11 @@ class CoverLetterExecutor(AgentExecutor):
         except (json.JSONDecodeError, KeyError, TypeError, AttributeError) as e:
             raise ValueError(f"The model's answer is not the expected JSON: {answer[:200]!r}") from e
 
-    async def _write_letter(self, state: dict, answer: str) -> dict:
+    async def _write_letter(self, state: dict, answer: str, usage: Usage, run_id: str) -> dict:
         requirements, report, cv_text = state["requirements"], state["report"], state["cv_text"]
         model_input = build_model_input(requirements, report, answer, cv_text)
 
-        letter, claims = await self._ask_model(model_input)
+        letter, claims = await self._ask_model(model_input, usage, run_id)
         # CLAIMS CHECKED: every quote must appear in the CV, or in the answer / confirmed items.
         proven, unproven = check_claims(claims, cv_text, answer, report)
 
@@ -199,7 +213,7 @@ class CoverLetterExecutor(AgentExecutor):
             # REWRITE: ask once more, without the unproven claims, then check again.
             rewrite_used = True
             first_unproven = unproven
-            letter, claims = await self._ask_model(build_rewrite_input(model_input, letter, unproven))
+            letter, claims = await self._ask_model(build_rewrite_input(model_input, letter, unproven), usage, run_id)
             proven, unproven = check_claims(claims, cv_text, answer, report)
         else:
             first_unproven = []
@@ -217,17 +231,21 @@ class CoverLetterExecutor(AgentExecutor):
         }
         return {"letter": letter, "details": details}
 
-    async def _fail(self, updater: TaskUpdater, error: str) -> None:
-        # FAILED STATUS: final state, with the error as a text message.
-        await updater.failed(updater.new_agent_message([new_text_part(f"Cover Letter Writer failed: {error}")]))
+    async def _fail(self, updater: TaskUpdater, error: str, usage: Usage | None = None) -> None:
+        # FAILED STATUS: final state, with the error as a text message (and the usage so far, if any).
+        metadata = {USAGE_KEY: usage.as_metadata()} if usage else None
+        await updater.failed(
+            updater.new_agent_message([new_text_part(f"Cover Letter Writer failed: {error}")], metadata=metadata)
+        )
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
         raise UnsupportedOperationError()
 
 
 def main() -> None:
+    # The model belongs to the agent: read once at startup, checked before the server starts.
     model = read_setting("COVER_LETTER_MODEL")
-    print(f"Cover Letter Writer using model: {model}")
+    startup_check("Cover Letter Writer", model)
     handler = DefaultRequestHandler(
         agent_executor=CoverLetterExecutor(model),
         task_store=InMemoryTaskStore(),

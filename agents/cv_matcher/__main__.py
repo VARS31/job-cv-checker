@@ -37,7 +37,15 @@ from agents.cv_matcher.schema import (
 )
 from agents.cv_matcher.scoring import build_report
 from agents.cv_text import extract_pdf_text
-from agents.model_client import PROJECT_ROOT, ModelError, ask_model, read_setting
+from agents.model_client import (
+    PROJECT_ROOT,
+    USAGE_KEY,
+    ModelError,
+    Usage,
+    ask_model,
+    read_setting,
+    startup_check,
+)
 
 HOST = "localhost"
 PORT = 9002
@@ -53,7 +61,7 @@ STATE_KEY = "cv_matcher_state"
 AGENT_CARD = AgentCard(
     name="CV Matcher",
     description="Compares a CV with a job's requirements and asks yes/no questions when unsure.",
-    version="0.2.0",
+    version="0.3.0",
     supported_interfaces=[
         AgentInterface(url=URL, protocol_binding="JSONRPC", protocol_version="1.0")
     ],
@@ -111,31 +119,33 @@ class CvMatcherExecutor(AgentExecutor):
         requirements = data_parts[0]
 
         await updater.start_work()  # STATUS: working
+        # USAGE: tokens, cost and time of this task's model calls, sent back as result metadata.
+        usage = Usage(self.model)
 
         try:
             cv_text = extract_pdf_text(pdf_parts[0].raw)
         except ValueError as error:
-            await self._fail(updater, str(error))
+            await self._fail(updater, str(error), usage)
             return
 
         checklist = build_checklist(requirements)
         if not checklist:
-            await self._fail(updater, "The requirements contain no items to check.")
+            await self._fail(updater, "The requirements contain no items to check.", usage)
             return
 
         try:
-            analysis = await self._check_with_model(checklist, cv_text)
+            analysis = await self._check_with_model(checklist, cv_text, usage, context.context_id)
         except (ModelError, ValueError) as error:
-            await self._fail(updater, str(error))
+            await self._fail(updater, str(error), usage)
             return
 
         questions = build_questions(analysis)
         if questions:
-            await self._ask_user(updater, requirements, analysis, questions)
+            await self._ask_user(updater, requirements, analysis, questions, usage)
             return
-        await self._finish(updater, requirements, analysis)
+        await self._finish(updater, requirements, analysis, usage)
 
-    async def _check_with_model(self, checklist: list[dict], cv_text: str) -> list[dict]:
+    async def _check_with_model(self, checklist: list[dict], cv_text: str, usage: Usage, run_id: str) -> list[dict]:
         """One model call for all requirements, then the quote check in plain Python."""
         instructions = PROMPT_FILE.read_text(encoding="utf-8")
         user_message = f"Requirements:\n{checklist_as_text(checklist)}\n\nCV:\n{cv_text}"
@@ -147,6 +157,8 @@ class CvMatcherExecutor(AgentExecutor):
             system=instructions,
             json_schema=CHECK_SCHEMA,
             timeout=MODEL_TIMEOUT_SECONDS,
+            usage=usage,
+            run_id=run_id,
         )
         try:
             checks = json.loads(answer)["checks"]
@@ -156,7 +168,7 @@ class CvMatcherExecutor(AgentExecutor):
         # QUOTE CHECK: a "found" only stays found if its quote really appears in the CV.
         return apply_model_checks(checklist, checks, cv_text)
 
-    async def _ask_user(self, updater, requirements, analysis, questions) -> None:
+    async def _ask_user(self, updater, requirements, analysis, questions, usage: Usage) -> None:
         text = "Please answer yes or no:\n" + "\n".join(f"{q['id']}: {q['question']}" for q in questions)
         message = updater.new_agent_message(
             [
@@ -167,7 +179,10 @@ class CvMatcherExecutor(AgentExecutor):
         )
         # STATE SAVED: the half-finished analysis goes into the task's metadata.
         # The SDK merges status-update metadata into task.metadata in the task store.
-        state = {STATE_KEY: {"requirements": requirements, "analysis": analysis, "questions": questions}}
+        # The usage so far goes with it, so the final result can report the model call made before the pause.
+        state = {STATE_KEY: {
+            "requirements": requirements, "analysis": analysis, "questions": questions, "usage": usage.as_metadata(),
+        }}
 
         # INPUT-REQUIRED: pause the task. execute() returns; the questions are the status message.
         await updater.update_status(
@@ -178,6 +193,7 @@ class CvMatcherExecutor(AgentExecutor):
         # STATE SAVED (read back): the analysis we stored when we paused.
         state = MessageToDict(task.metadata)[STATE_KEY]
         requirements, analysis, questions = state["requirements"], state["analysis"], state["questions"]
+        usage = Usage.from_metadata(state["usage"]) if "usage" in state else Usage(self.model)
 
         answers = next(
             (d["answers"] for d in get_data_parts(context.message.parts)
@@ -186,36 +202,41 @@ class CvMatcherExecutor(AgentExecutor):
         )
         if answers is None:
             # Not an answer we understand: ask the same questions again.
-            await self._ask_user(updater, requirements, analysis, questions)
+            await self._ask_user(updater, requirements, analysis, questions, usage)
             return
 
         await updater.start_work()  # STATUS: working again
         # ANSWERS MERGED: yes -> confirmed, no -> missing.
         analysis = merge_answers(analysis, questions, answers)
-        await self._finish(updater, requirements, analysis)
+        await self._finish(updater, requirements, analysis, usage)
 
-    async def _finish(self, updater: TaskUpdater, requirements: dict, analysis: list[dict]) -> None:
+    async def _finish(self, updater: TaskUpdater, requirements: dict, analysis: list[dict], usage: Usage) -> None:
         # SCORE CALCULATED (inside build_report, plain Python).
         report = build_report(requirements, analysis)
         # Which code produced this result (same as the agent card version).
         report["agent_version"] = AGENT_CARD.version
         # ARTIFACT: one DATA part with the report.
+        # The artifact's METADATA says which model produced it and what it cost.
         await updater.add_artifact(
-            [new_data_part(report, media_type="application/json")], name="cv_match_report"
+            [new_data_part(report, media_type="application/json")],
+            name="cv_match_report",
+            metadata={USAGE_KEY: usage.as_metadata()},
         )
         await updater.complete()  # STATUS: completed
 
-    async def _fail(self, updater: TaskUpdater, error: str) -> None:
-        # FAILED STATUS: final state, with the error as a text message.
-        await updater.failed(updater.new_agent_message([new_text_part(f"CV Matcher failed: {error}")]))
+    async def _fail(self, updater: TaskUpdater, error: str, usage: Usage | None = None) -> None:
+        # FAILED STATUS: final state, with the error as a text message (and the usage so far, if any).
+        metadata = {USAGE_KEY: usage.as_metadata()} if usage else None
+        await updater.failed(updater.new_agent_message([new_text_part(f"CV Matcher failed: {error}")], metadata=metadata))
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
         raise UnsupportedOperationError()
 
 
 def main() -> None:
+    # The model belongs to the agent: read once at startup, checked before the server starts.
     model = read_setting("CV_MATCHER_MODEL")
-    print(f"CV Matcher using model: {model}")
+    startup_check("CV Matcher", model)
 
     handler = DefaultRequestHandler(
         agent_executor=CvMatcherExecutor(model),

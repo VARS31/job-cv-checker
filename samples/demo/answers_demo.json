@@ -1,0 +1,13 @@
+{
+  "about": "Scripted answers for the fictional candidate in cv_demo.pdf (Jordan Example) applying to job_ad_demo.txt. Every 'yes' is something the demo CV supports; Kubernetes and German (the CV says basic, A2) are 'no'. Used for repeatable runs: python -m orchestrator samples/demo/job_ad_demo.txt samples/demo/cv_demo.pdf --answers samples/demo/answers_demo.json",
+  "yes_no": {
+    "no_if_question_contains": ["Kubernetes", "German"],
+    "yes_if_question_contains": [
+      "Python", "SQL", "FastAPI", "Django", "REST", "LLM", "RAG", "retrieval",
+      "Docker", "CI/CD", "Azure", "Computer Science", "Bachelor", "years", "backend",
+      "English", "evaluation", "travel", "hybrid", "Hamburg", "office", "customer", "product"
+    ],
+    "otherwise": "no"
+  },
+  "free_text": "For the last two years I have built a RAG search assistant for an internal support team, and I want to build the same kind of tool for customers. Lumenpath's plan to turn shipping data and support knowledge into tools that freight companies use every day is exactly that work."
+}

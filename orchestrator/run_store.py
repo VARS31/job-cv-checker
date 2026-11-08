@@ -1,4 +1,8 @@
-"""RUN SAVED: everything a run produces goes into results/runs/<date-time>/."""
+"""RUN SAVED: everything a run produces goes into results/runs/<date-time>/.
+
+run_log.json has one entry per step (agent, model, tokens, cost, seconds, questions and answers)
+and, when the run ends, the totals.
+"""
 
 import json
 from datetime import datetime
@@ -42,7 +46,14 @@ class RunStore:
             (self.dir / filename).write_text(text, encoding="utf-8")
 
     def finish(self, status: str, message: str | None = None) -> None:
-        self.log.update(finished=_now(), status=status, message=message)
+        steps = self.log["steps"]
+        totals = {
+            "cost_usd": round(sum(s["cost_usd"] for s in steps), 6),
+            "input_tokens": sum(s["input_tokens"] for s in steps),
+            "output_tokens": sum(s["output_tokens"] for s in steps),
+            "seconds": round(sum(s["seconds"] for s in steps), 1),
+        }
+        self.log.update(finished=_now(), status=status, message=message, totals=totals)
         self._write_log()
 
     def _write_log(self) -> None:

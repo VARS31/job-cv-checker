@@ -25,7 +25,15 @@ from a2a.types import (
 )
 
 from agents.job_analyst.schema import REQUIREMENTS_SCHEMA, clean_requirements
-from agents.model_client import PROJECT_ROOT, ModelError, ask_model, read_setting
+from agents.model_client import (
+    PROJECT_ROOT,
+    USAGE_KEY,
+    ModelError,
+    Usage,
+    ask_model,
+    read_setting,
+    startup_check,
+)
 
 HOST = "localhost"
 PORT = 9001
@@ -40,7 +48,7 @@ PROMPT_FILE = PROJECT_ROOT / "prompts" / "job_analyst.md"
 AGENT_CARD = AgentCard(
     name="Job Analyst",
     description="Reads a job ad and pulls out the key requirements.",
-    version="0.4.0",
+    version="0.5.0",
     # Where and how to talk to this agent: JSON-RPC over HTTP, A2A protocol 1.0.
     supported_interfaces=[
         AgentInterface(url=URL, protocol_binding="JSONRPC", protocol_version="1.0")
@@ -64,7 +72,7 @@ AGENT_CARD = AgentCard(
 )
 
 
-async def extract_requirements(job_ad: str, model: str) -> dict:
+async def extract_requirements(job_ad: str, model: str, usage: Usage | None = None, run_id: str | None = None) -> dict:
     """Ask the model for the requirements and check the answer. Raises on failure."""
     # Read the prompt on every request, so edits to the file apply without a restart.
     instructions = PROMPT_FILE.read_text(encoding="utf-8")
@@ -72,7 +80,7 @@ async def extract_requirements(job_ad: str, model: str) -> dict:
     # MODEL CALL (through the shared model client): instructions as the system message,
     # the job ad as the user message, and the schema to enforce JSON.
     answer = await ask_model(
-        job_ad, model, system=instructions, json_schema=REQUIREMENTS_SCHEMA
+        job_ad, model, system=instructions, json_schema=REQUIREMENTS_SCHEMA, usage=usage, run_id=run_id
     )
 
     # JSON OUTPUT CHECKED: the answer must parse and have exactly our fields.
@@ -107,20 +115,27 @@ class JobAnalystExecutor(AgentExecutor):
         # STATUS: tell the client we are working on it.
         await updater.start_work()
 
+        # USAGE: tokens, cost and time of this task's model calls, sent back as result metadata.
+        usage = Usage(self.model)
         try:
-            requirements = await extract_requirements(job_ad, self.model)
+            requirements = await extract_requirements(job_ad, self.model, usage, context.context_id)
         except (ModelError, ValueError) as error:
             # FAILED STATUS: final state, with the error as a text message in the status.
             await updater.failed(
-                updater.new_agent_message([new_text_part(f"Job Analyst failed: {error}")])
+                updater.new_agent_message(
+                    [new_text_part(f"Job Analyst failed: {error}")],
+                    metadata={USAGE_KEY: usage.as_metadata()},
+                )
             )
             return
 
         # ARTIFACT: the result of the task. Its one part is a DATA part (structured JSON),
         # not text. Note: protobuf stores all numbers as floats, so 3 arrives as 3.0.
+        # The artifact's METADATA says which model produced it and what it cost (the agent stays opaque).
         await updater.add_artifact(
             [new_data_part(requirements, media_type="application/json")],
             name="job_requirements",
+            metadata={USAGE_KEY: usage.as_metadata()},
         )
 
         # STATUS: final state; the task is done.
@@ -131,8 +146,9 @@ class JobAnalystExecutor(AgentExecutor):
 
 
 def main() -> None:
+    # The model belongs to the agent: read once at startup, checked before the server starts.
     model = read_setting("JOB_ANALYST_MODEL")
-    print(f"Job Analyst using model: {model}")
+    startup_check("Job Analyst", model)
 
     # The request handler connects the HTTP layer to our executor and keeps tasks in memory.
     handler = DefaultRequestHandler(
