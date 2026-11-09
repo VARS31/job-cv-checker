@@ -76,3 +76,17 @@ def test_each_agent_reads_the_setting_start_agents_sets():
         source = (ROOT / module.replace(".", "/") / "__main__.py").read_text()
         assert f'read_setting("{setting}")' in source
         assert "startup_check(" in source
+
+
+def test_reviewer_step_sends_the_job_ad_as_a_labelled_text_part():
+    from google.protobuf.json_format import MessageToDict
+
+    from orchestrator.pipeline import APPLICATION_REVIEWER
+
+    results = {
+        "requirements": {"hard_skills_required": []}, "match_report": {"score_percent": 50},
+        "cover_letter": "the letter", "job_ad": "the ad", "cv_pdf": b"%PDF", "cv_filename": "cv.pdf",
+    }
+    parts = APPLICATION_REVIEWER.build_parts(results)
+    labels = {MessageToDict(p.metadata).get("content"): p.text for p in parts if p.HasField("text")}
+    assert labels == {"cover_letter": "the letter", "job_ad": "the ad"}

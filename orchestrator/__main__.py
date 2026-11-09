@@ -51,6 +51,7 @@ async def run(job_ad_file: Path, cv_file: Path, answers_file: Path | None = None
 
         inputs = {"job_ad": job_ad_file.name, "cv": cv_file.name, "answers": str(answers_file) if answers_file else "terminal"}
         run_store = RunStore(context_id, inputs)
+        run_store.save_text("job_ad.txt", results["job_ad"])  # so the run can be reviewed again later
         print(f"Run {run_store.relative_dir}  (context {context_id})")
         print(f"Answers: {'from ' + str(answers_file) if answers_file else 'you, in this terminal'}\n")
 

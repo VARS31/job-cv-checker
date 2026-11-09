@@ -39,6 +39,9 @@ class RunStore:
         self.log["steps"].append(result.for_log())
         self._write_log()  # written after every step, so a stopped run still has its log
 
+    def save_text(self, filename: str, text: str) -> None:
+        (self.dir / filename).write_text(text, encoding="utf-8")
+
     def save_outputs(self, step: Step, results: dict) -> None:
         for key, filename in step.outputs.items():
             value = results[key]

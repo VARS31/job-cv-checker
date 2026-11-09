@@ -174,7 +174,7 @@ python -m agents.cover_letter_writer                           # agent on :9003
 python scripts/try_cover_letter.py results/ministral-3_8b/my_job_ad.json results/cv_matcher/my_job_ad__my_cv.json samples/cvs/my_cv.pdf
 
 python -m agents.application_reviewer                          # agent on :9004
-python scripts/try_reviewer.py results/runs/<date-time>       # review an existing run again
+python -m scripts.try_reviewer results/runs/<date-time>       # review an existing run again (--letter: another letter)
 ```
 
 These `try_*` scripts are interactive tools, not automated tests: they print the raw A2A JSON of each step. You can see an agent card in the browser at http://localhost:9001/.well-known/agent-card.json (or `:9002`, `:9003`, `:9004`).

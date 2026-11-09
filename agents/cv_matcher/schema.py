@@ -1,6 +1,8 @@
 """The CV Matcher's data: checklist from the job requirements, the model's JSON schema,
 the quote check, the yes/no questions, and merging the user's answers."""
 
+import re
+
 from agents.cv_text import quote_in_text
 
 NOT_STATED = "not_stated"
@@ -9,6 +11,19 @@ MAX_QUESTIONS = 5
 
 # Status values. The model returns the first three; "confirmed" comes from the user.
 FOUND, MISSING, UNCLEAR, CONFIRMED = "found", "missing", "unclear", "confirmed"
+
+# Things a CV can't show: willingness (to travel, relocate, work shifts), start date, availability.
+# Such an item is never "missing": it becomes "unclear", so the candidate is asked.
+CANNOT_SHOW = re.compile(
+    r"\btravel|\brelocat|\bwilling|\bstart(?:ing)?\s+date|\bable\s+to\s+start|\bnotice\s+period"
+    r"|\bavailab(?:le|ility)\s+(?:on|for|to|at|during|in)\b|\bshifts?\b|\bweekends?\b|\bnights?\b"
+    r"|\bon[\s-]call\b",
+    re.IGNORECASE,
+)
+
+
+def cannot_show_in_cv(text: str) -> bool:
+    return bool(CANNOT_SHOW.search(text))
 
 
 # JSON OUTPUT ENFORCED: Ollama forces the model's answer into this shape.
@@ -57,6 +72,10 @@ def build_checklist(req: dict) -> list[dict]:
         add(point, REQUIRED, "other_requirements")
     for skill in req.get("hard_skills_preferred", []):
         add(skill, PREFERRED, "hard_skills_preferred")
+    for point in req.get("experience_preferred", []):
+        add(point, PREFERRED, "experience_preferred")
+    for point in req.get("other_requirements_preferred", []):
+        add(point, PREFERRED, "other_requirements_preferred")
     if req.get("education_preferred", NOT_STATED) != NOT_STATED:
         add(req["education_preferred"], PREFERRED, "education_preferred")
     for skill in req.get("soft_skills", []):
@@ -86,25 +105,37 @@ def apply_model_checks(checklist: list[dict], checks: list[dict], cv_text: str) 
                 status, note = UNCLEAR, f"quote not found in CV: {quote!r}"
             if status != FOUND:
                 quote = ""
+        if status == MISSING and cannot_show_in_cv(item["text"]):
+            # CAN'T BE SHOWN IN A CV: ask the candidate instead of counting it as missing.
+            status, note = UNCLEAR, "a CV can't show this, so you are asked"
         analysis.append({**item, "status": status, "quote": quote, "note": note})
     return analysis
 
 
-# Question priority: years/experience first, then education, then required hard skills,
-# then everything else (languages, other requirements).
+# Question priority: things a CV can't show first (only the candidate knows them), then
+# years/experience, then education, then required hard skills, then everything else.
 QUESTION_PRIORITY = {
     "min_years_experience": 0,
     "experience_details": 0,
     "education_required": 1,
     "hard_skills_required": 2,
 }
+CANNOT_SHOW_PRIORITY = -1
+
+
+def _priority(item: dict) -> int:
+    return CANNOT_SHOW_PRIORITY if cannot_show_in_cv(item["text"]) else QUESTION_PRIORITY.get(item["source"], 3)
 
 
 def build_questions(analysis: list[dict]) -> list[dict]:
-    """Up to 5 yes/no questions, one per unclear REQUIRED item, most important first."""
-    unclear = [i for i in analysis if i["kind"] == REQUIRED and i["status"] == UNCLEAR]
+    """Up to 5 yes/no questions, most important first: one per unclear REQUIRED item, plus every
+    unclear item a CV can't show (willingness, start date, availability), even a preferred one."""
+    unclear = [
+        i for i in analysis
+        if i["status"] == UNCLEAR and (i["kind"] == REQUIRED or cannot_show_in_cv(i["text"]))
+    ]
     # sorted() keeps the checklist order within each priority group.
-    unclear = sorted(unclear, key=lambda i: QUESTION_PRIORITY.get(i["source"], 3))
+    unclear = sorted(unclear, key=_priority)
     return [
         {"id": f"q{n}", "item_id": item["id"], "question": f"Does this apply to you: {item['text']}?"}
         for n, item in enumerate(unclear[:MAX_QUESTIONS], start=1)

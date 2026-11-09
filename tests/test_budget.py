@@ -103,3 +103,12 @@ def test_four_processes_writing_at_once_lose_nothing(tmp_path):
     assert len(ledger["calls"]) == workers * calls
     assert ledger["total_usd"] == pytest.approx(workers * calls * 0.001)
     assert sum(run["calls"] for run in ledger["runs"].values()) == workers * calls
+
+
+def test_sonnet_has_one_rate_card_and_its_own_cache_rate():
+    sonnet = "claude-sonnet-5-5"
+    assert has_price(sonnet)
+    assert call_cost(sonnet, 10_000, 1_000) == pytest.approx((2.00 * 10_000 + 10.00 * 1_000) / 1_000_000)
+    # No long-prompt surcharge: 200,000 tokens cost the same per token as 10,000.
+    assert call_cost(sonnet, 200_000, 0) == pytest.approx(2.00 * 200_000 / 1_000_000)
+    assert call_cost(sonnet, 0, 0, cache_read=1_000_000) == pytest.approx(2.00 * 0.05)

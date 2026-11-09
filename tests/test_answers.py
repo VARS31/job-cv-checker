@@ -56,3 +56,22 @@ def test_broken_files_are_rejected(tmp_path, content):
 
 def test_no_file_means_the_terminal():
     assert isinstance(load_answers(None), TerminalAnswers)
+
+
+@pytest.mark.parametrize(
+    "person, question, expected",
+    [
+        ("jane_doe", "Does this apply to you: Occasional travel to customers (about 10%)?", True),
+        ("jane_doe", "Does this apply to you: Hands-on experience with LLMs and RAG?", True),
+        ("robin_sample", "Does this apply to you: Hands-on experience with LLMs and RAG?", False),
+        ("robin_sample", "Does this apply to you: Experience with AWS or Azure?", False),
+        ("robin_sample", "Does this apply to you: Bachelor's degree in Computer Science or equivalent?", True),
+        ("casey_placeholder", "Does this apply to you: Fluent English?", False),
+        ("casey_placeholder", "Does this apply to you: Occasional travel to customers (about 10%)?", True),
+        ("casey_placeholder", "Does this apply to you: Python and SQL?", False),
+    ],
+)
+def test_dummy_cv_answers_follow_each_cv(person, question, expected, capsys):
+    path = DEMO_ANSWERS.parent / f"answers_{person}.json"
+    assert FileAnswers(path).yes_no(question) is expected
+    assert FileAnswers(path).free_text("Why this role?")

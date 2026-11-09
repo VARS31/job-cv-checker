@@ -5,6 +5,7 @@ from agents.cv_matcher.schema import (
     apply_model_checks,
     build_checklist,
     build_questions,
+    cannot_show_in_cv,
     merge_answers,
 )
 from agents.cv_matcher.scoring import build_report, calculate_score
@@ -95,3 +96,56 @@ def test_report_lists_each_status_and_a_summary():
     assert [i["item"] for i in report["missing"]] == ["SQL", "Go"]
     assert [i["item"] for i in report["unclear"]] == ["German (fluent)"]
     assert report["summary"].startswith("The CV matches 50% of the requirements for Developer at Example GmbH.")
+
+
+
+def test_new_preferred_fields_score_one_point_each():
+    requirements = {
+        **REQUIREMENTS,
+        "experience_preferred": ["Logistics experience"],
+        "other_requirements_preferred": ["Cloud certification"],
+    }
+    checklist = build_checklist(requirements)
+    added = [i for i in checklist if i["source"] in ("experience_preferred", "other_requirements_preferred")]
+    assert [(i["text"], i["kind"]) for i in added] == [
+        ("Logistics experience", "preferred"), ("Cloud certification", "preferred"),
+    ]
+    analysis = apply_model_checks(checklist, [], CV)
+    assert calculate_score(analysis)["max_points"] == 4 * 2 + 4 * 1
+
+
+def test_what_a_cv_cannot_show_is_recognised():
+    for text in ["Occasional travel to customers (about 10%)", "Willingness to relocate to Hamburg",
+                 "Start date within 3 months", "Availability on Friday and Saturday nights",
+                 "Willingness to work three shifts, including weekends"]:
+        assert cannot_show_in_cv(text), text
+    for text in ["Python", "High availability systems", "Kubernetes", "PostgreSQL"]:
+        assert not cannot_show_in_cv(text), text
+
+
+def test_cannot_show_items_are_unclear_never_missing_and_asked_first():
+    requirements = {
+        **REQUIREMENTS,
+        "other_requirements": ["Occasional travel to customers (about 10%)"],
+        "other_requirements_preferred": ["Willingness to relocate"],
+    }
+    checklist = build_checklist(requirements)
+    by_text = {i["text"]: i["id"] for i in checklist}
+    checks = [{"id": i["id"], "status": "missing", "quote": ""} for i in checklist]
+    analysis = {i["text"]: i for i in apply_model_checks(checklist, checks, CV)}
+    travel, relocate = analysis["Occasional travel to customers (about 10%)"], analysis["Willingness to relocate"]
+    assert travel["status"] == relocate["status"] == "unclear"
+    assert "can't show" in travel["note"]
+    assert analysis["Go"]["status"] == "missing"  # an ordinary skill stays missing
+
+    questions = build_questions(list(analysis.values()))
+    asked = [q["item_id"] for q in questions]
+    # Both are asked (the preferred one too), and before anything else.
+    assert asked[:2] == [by_text["Occasional travel to customers (about 10%)"], by_text["Willingness to relocate"]]
+
+
+def test_a_cannot_show_item_found_with_a_real_quote_stays_found():
+    checklist = build_checklist({**REQUIREMENTS, "other_requirements": ["Willing to travel"]})
+    item = next(i for i in checklist if i["text"] == "Willing to travel")
+    analysis = apply_model_checks(checklist, [{"id": item["id"], "status": "found", "quote": "Docker too"}], CV)
+    assert next(i for i in analysis if i["id"] == item["id"])["status"] == "found"

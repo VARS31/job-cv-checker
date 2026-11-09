@@ -61,7 +61,7 @@ STATE_KEY = "cv_matcher_state"
 AGENT_CARD = AgentCard(
     name="CV Matcher",
     description="Compares a CV with a job's requirements and asks yes/no questions when unsure.",
-    version="0.3.0",
+    version="0.4.0",
     supported_interfaces=[
         AgentInterface(url=URL, protocol_binding="JSONRPC", protocol_version="1.0")
     ],
@@ -75,8 +75,9 @@ AGENT_CARD = AgentCard(
             name="Match CV to job requirements",
             description=(
                 "Checks every job requirement against a CV (PDF), with an exact CV quote as "
-                "proof. Asks up to 5 yes/no questions for unclear required items, then returns "
-                "a match score (required counts 2, preferred 1) and a short report."
+                "proof. Asks up to 5 yes/no questions for unclear required items and for anything "
+                "a CV can't show (willingness to travel or relocate, start date, availability), then "
+                "returns a match score (required counts 2, preferred 1) and a short report."
             ),
             tags=["cv", "matching", "job requirements"],
             examples=["Requirements JSON from the Job Analyst + cv.pdf"],

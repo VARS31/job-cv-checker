@@ -48,7 +48,7 @@ PROMPT_FILE = PROJECT_ROOT / "prompts" / "job_analyst.md"
 AGENT_CARD = AgentCard(
     name="Job Analyst",
     description="Reads a job ad and pulls out the key requirements.",
-    version="0.5.0",
+    version="0.6.0",
     # Where and how to talk to this agent: JSON-RPC over HTTP, A2A protocol 1.0.
     supported_interfaces=[
         AgentInterface(url=URL, protocol_binding="JSONRPC", protocol_version="1.0")
@@ -62,8 +62,8 @@ AGENT_CARD = AgentCard(
             name="Analyze job ad",
             description=(
                 "Reads a job ad and returns its requirements as JSON: title, company, "
-                "location, education, experience, hard and soft skills (required vs. "
-                "preferred), languages, and responsibilities."
+                "location, education, experience, hard and soft skills, other requirements "
+                "(each required vs. preferred), languages, and responsibilities."
             ),
             tags=["job ad", "requirements"],
             examples=["Here is a job ad: ..."],

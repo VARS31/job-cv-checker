@@ -6,12 +6,17 @@ NOT_STATED = "not_stated"
 
 # Words that mean "preferred". An item in a required list containing one of these
 # is moved to the matching preferred list, and the marker is removed from its text.
+# A safety net: the prompt already asks for the preferred fields.
 PREFERRED_MARKER = re.compile(
-    r"\(\s*preferred\s*\)|\b(?:is\s+)?a\s+plus\b|\bnice[\s-]to[\s-]have\b|\bideally\b",
+    r"\(\s*(?:strongly\s+)?preferred\s*\)|\b(?:is\s+)?a\s+plus\b|\bnice[\s-]to[\s-]have\b|\bideally\b",
     re.IGNORECASE,
 )
-# Required list -> matching preferred list.
-REQUIRED_TO_PREFERRED = {"hard_skills_required": "hard_skills_preferred"}
+# Required list -> matching preferred list (the same pattern for skills, experience and other requirements).
+REQUIRED_TO_PREFERRED = {
+    "hard_skills_required": "hard_skills_preferred",
+    "experience_details": "experience_preferred",
+    "other_requirements": "other_requirements_preferred",
+}
 
 
 def _text(description: str) -> dict:
@@ -51,6 +56,7 @@ REQUIREMENTS_SCHEMA = {
             "description": "The main minimum years of experience, or null.",
         },
         "experience_details": _list("Short points on specific experience asked for, e.g. '3+ years AI solutions'."),
+        "experience_preferred": _list("Experience the ad calls a plus/ideal/preferred, as short points."),
         "hard_skills_required": _list("Required learnable, checkable skills as short items."),
         "hard_skills_preferred": _list("Hard skills the ad calls a plus/preferred, as short items."),
         "soft_skills": _list("Personal and people skills as short items."),
@@ -70,6 +76,7 @@ REQUIREMENTS_SCHEMA = {
         },
         "responsibilities": _list("0 to 6 short points on what the job involves.", max_items=6),
         "other_requirements": _list("Anything else asked for: travel, certifications, permits."),
+        "other_requirements_preferred": _list("Other things the ad calls a plus: travel, certifications, permits."),
     },
     "additionalProperties": False,
 }
@@ -82,7 +89,8 @@ TEXT_FIELDS = [
 # Order matters for de-duplication across fields: the first field keeps the item.
 LIST_FIELDS = [
     "hard_skills_required", "hard_skills_preferred", "soft_skills",
-    "experience_details", "other_requirements", "responsibilities",
+    "experience_details", "experience_preferred",
+    "other_requirements", "other_requirements_preferred", "responsibilities",
 ]
 
 

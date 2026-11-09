@@ -39,3 +39,14 @@ def test_demo_cv_is_readable():
 def test_not_a_pdf_raises_value_error():
     with pytest.raises(ValueError):
         extract_pdf_text(b"this is not a pdf")
+
+
+@pytest.mark.parametrize(
+    "filename, name",
+    [("cv_jane_doe.pdf", "Jane Doe"), ("cv_robin_sample.pdf", "Robin Sample"),
+     ("cv_casey_placeholder.pdf", "Casey Placeholder")],
+)
+def test_dummy_cvs_are_readable_and_marked_fictional(filename, name):
+    text = extract_pdf_text((DEMO_CV.parent / filename).read_bytes())
+    assert text.startswith(name)
+    assert "Fictional demo CV" in text

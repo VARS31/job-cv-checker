@@ -1,11 +1,14 @@
 """The Application Reviewer's grounding check, cliché net and review.md (plain Python)."""
 
+from agents.application_reviewer.__main__ import split_inputs
 from agents.application_reviewer.schema import (
     add_known_cliches,
+    build_model_input,
     build_review_md,
     ground_review,
     letter_sentences,
 )
+from orchestrator.pipeline import labelled_text
 
 PARAGRAPH = (
     "I built a search assistant for support teams over many articles and measured answer quality "
@@ -62,3 +65,34 @@ def test_review_md_shows_verdict_and_dropped_count():
     assert "**Verdict: maybe.**" in md
     assert "1 item(s) were dropped" in md
     assert md.rstrip().endswith("*Application Reviewer 0.1.0, model some-model.*")
+
+
+JOB_AD = "Backend Engineer at Example GmbH. About us: we build software for freight companies."
+
+
+def test_reviewer_input_contains_the_original_job_ad():
+    report = {"summary": "", "matched": [], "confirmed_by_user": [], "missing": [], "unclear": []}
+    text = build_model_input({"job_title": "Backend Engineer"}, report, LETTER, "cv text", JOB_AD)
+    assert "JOB AD (the original text, including the company description)" in text
+    assert "software for freight companies" in text
+
+
+def test_labelled_text_parts_tell_letter_and_job_ad_apart():
+    from a2a.helpers import new_data_part
+
+    parts = [
+        new_data_part({"hard_skills_required": []}),
+        new_data_part({"score_percent": 50}),
+        labelled_text(JOB_AD, "job_ad"),  # order doesn't matter
+        labelled_text(LETTER, "cover_letter"),
+    ]
+    requirements, report, letter, job_ad = split_inputs(parts)
+    assert requirements is not None and report is not None
+    assert letter == LETTER.strip() and job_ad == JOB_AD
+
+
+def test_an_unlabelled_text_part_is_the_letter():
+    from a2a.helpers import new_text_part
+
+    _, _, letter, job_ad = split_inputs([new_text_part(LETTER)])
+    assert letter == LETTER.strip() and job_ad is None

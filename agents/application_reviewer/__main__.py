@@ -12,7 +12,9 @@ import json
 import uvicorn
 from starlette.applications import Starlette
 
-from a2a.helpers import get_data_parts, get_text_parts, new_data_part, new_task_from_user_message, new_text_part
+from google.protobuf.json_format import MessageToDict
+
+from a2a.helpers import get_data_parts, new_data_part, new_task_from_user_message, new_text_part
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.server.request_handlers import DefaultRequestHandler
@@ -51,12 +53,12 @@ MODEL_TIMEOUT_SECONDS = 300
 AGENT_CARD = AgentCard(
     name="Application Reviewer",
     description="Reviews a job application like a senior recruiter. Reports only; never rewrites the letter.",
-    version="0.2.0",
+    version="0.3.0",
     supported_interfaces=[
         AgentInterface(url=URL, protocol_binding="JSONRPC", protocol_version="1.0")
     ],
     capabilities=AgentCapabilities(streaming=False),
-    # Input: requirements + match report (data), the cover letter (text), the CV (PDF file).
+    # Input: requirements + match report (data), the cover letter and the job ad (text), the CV (PDF file).
     default_input_modes=["application/json", "text/plain", "application/pdf"],
     # Output: the review as JSON, plus a readable Markdown version.
     default_output_modes=["application/json", "text/markdown"],
@@ -71,22 +73,34 @@ AGENT_CARD = AgentCard(
                 "3 to 5 likely interview questions."
             ),
             tags=["review", "recruiter", "cover letter", "job application"],
-            examples=["Requirements JSON + match report JSON + cover letter text + cv.pdf"],
+            examples=["Requirements JSON + match report JSON + cover letter text + job ad text + cv.pdf"],
         )
     ],
 )
 
 
-def split_inputs(parts) -> tuple[dict | None, dict | None, str | None]:
-    """Find the requirements and the report (data parts) and the letter (text part)."""
+def split_inputs(parts) -> tuple[dict | None, dict | None, str | None, str | None]:
+    """Find the requirements and the report (data parts), the letter and the job ad (text parts).
+
+    TEXT PART METADATA tells the two texts apart: {"content": "job_ad"} marks the ad;
+    the letter is the text part marked {"content": "cover_letter"} (or the first unmarked one).
+    """
     requirements = report = None
     for data in get_data_parts(parts):
         if isinstance(data, dict) and "score_percent" in data:
             report = data
         elif isinstance(data, dict) and "hard_skills_required" in data:
             requirements = data
-    texts = get_text_parts(parts)
-    return requirements, report, (texts[0].strip() if texts else None)
+    letter = job_ad = None
+    for part in parts:
+        if not part.HasField("text"):
+            continue
+        content = MessageToDict(part.metadata).get("content")
+        if content == "job_ad":
+            job_ad = part.text.strip()
+        elif letter is None and content in (None, "cover_letter"):
+            letter = part.text.strip()
+    return requirements, report, letter, job_ad
 
 
 class ApplicationReviewerExecutor(AgentExecutor):
@@ -102,12 +116,13 @@ class ApplicationReviewerExecutor(AgentExecutor):
         parts = context.message.parts
         # FILE PART: the CV. DATA PARTS: requirements and report. TEXT PART: the letter.
         pdf_parts = [p for p in parts if p.HasField("raw")]
-        requirements, report, letter = split_inputs(parts)
-        if not pdf_parts or requirements is None or report is None or not letter:
+        requirements, report, letter, job_ad = split_inputs(parts)
+        if not pdf_parts or requirements is None or report is None or not letter or not job_ad:
             await self._fail(
                 updater,
-                "Expected two data parts (requirements, CV Matcher report), one text part "
-                "(cover letter) and one file part (CV as PDF).",
+                "Expected two data parts (requirements, CV Matcher report), two text parts "
+                "(the cover letter, and the job ad marked with metadata content=job_ad) "
+                "and one file part (CV as PDF).",
             )
             return
 
@@ -116,7 +131,7 @@ class ApplicationReviewerExecutor(AgentExecutor):
         usage = Usage(self.model)
         try:
             cv_text = extract_pdf_text(pdf_parts[0].raw)
-            review = await self._review(requirements, report, letter, cv_text, usage, context.context_id)
+            review = await self._review(requirements, report, letter, cv_text, job_ad, usage, context.context_id)
         except (ModelError, ValueError) as error:
             await self._fail(updater, str(error), usage)
             return
@@ -138,12 +153,12 @@ class ApplicationReviewerExecutor(AgentExecutor):
         await updater.complete()  # STATUS: completed
 
     async def _review(
-        self, requirements: dict, report: dict, letter: str, cv_text: str, usage: Usage, run_id: str
+        self, requirements: dict, report: dict, letter: str, cv_text: str, job_ad: str, usage: Usage, run_id: str
     ) -> dict:
         instructions = PROMPT_FILE.read_text(encoding="utf-8")
         # MODEL CALL (through the shared model client), schema-enforced, temperature 0 on Ollama.
         answer = await ask_model(
-            build_model_input(requirements, report, letter, cv_text),
+            build_model_input(requirements, report, letter, cv_text, job_ad),
             self.model,
             system=instructions,
             json_schema=REVIEW_SCHEMA,

@@ -20,14 +20,22 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
-# Dollars per million tokens (input, output). Source: platform.claude.com/docs/en/about-claude/pricing,
-# checked on 2026-11-08. Claude Haiku 5.5 has two rate cards, chosen by prompt length. A prompt's length
-# counts all its input tokens, cached ones included. Output tokens include the model's thinking.
+# Dollars per million tokens (input, output). Source: platform.claude.com/docs/en/about-claude/pricing.
+# Output tokens include the model's thinking. We don't use caching, but a cached token would be billed,
+# so cache writes and reads are counted (as a multiple of the input rate).
+# - Claude Haiku 5.5 (checked 2026-11-08): two rate cards, chosen by prompt length; a prompt's length
+#   counts all its input tokens, cached ones included.
+# - Claude Sonnet 5.5 (checked 2026-11-09): one rate card for the whole context window.
 PRICES = {
-    "claude-haiku-5-5": {"long_prompt_above": 100_000, "short": (0.10, 0.50), "long": (0.50, 2.50)},
+    "claude-haiku-5-5": {
+        "long_prompt_above": 100_000, "short": (0.10, 0.50), "long": (0.50, 2.50),
+        "cache_write": 1.25, "cache_read": 0.1,
+    },
+    "claude-sonnet-5-5": {
+        "long_prompt_above": None, "short": (2.00, 10.00), "long": (2.00, 10.00),
+        "cache_write": 1.25, "cache_read": 0.05,
+    },
 }
-CACHE_WRITE = 1.25  # times the input rate. We don't use caching, but a cached token would be billed.
-CACHE_READ = 0.1
 WORST_CASE_CHARS_PER_TOKEN = 2  # a token is never less than half a character, so this over-estimates
 
 
@@ -43,8 +51,9 @@ def call_cost(model: str, input_tokens: int, output_tokens: int, cache_write: in
     """What one call costs in dollars."""
     price = PRICES[model]
     prompt_tokens = input_tokens + cache_write + cache_read
-    per_input, per_output = price["short"] if prompt_tokens <= price["long_prompt_above"] else price["long"]
-    billed_input = input_tokens + CACHE_WRITE * cache_write + CACHE_READ * cache_read
+    threshold = price["long_prompt_above"]
+    per_input, per_output = price["short"] if threshold is None or prompt_tokens <= threshold else price["long"]
+    billed_input = input_tokens + price["cache_write"] * cache_write + price["cache_read"] * cache_read
     return (per_input * billed_input + per_output * output_tokens) / 1_000_000
 
 

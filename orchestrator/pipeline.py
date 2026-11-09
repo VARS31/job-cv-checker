@@ -33,6 +33,14 @@ def _cv_part(results: dict) -> Part:
     return new_raw_part(results["cv_pdf"], media_type="application/pdf", filename=results["cv_filename"])
 
 
+def labelled_text(text: str, content: str) -> Part:
+    """TEXT PART with metadata saying what it is ("job_ad", "cover_letter"), so an agent that gets
+    two text parts can tell them apart."""
+    part = new_text_part(text, media_type="text/plain")
+    part.metadata.update({"content": content})
+    return part
+
+
 def _data(results: dict, key: str) -> Part:
     # DATA PART: an earlier agent's JSON result, passed on unchanged.
     return new_data_part(results[key], media_type="application/json")
@@ -104,7 +112,8 @@ APPLICATION_REVIEWER = Step(
     build_parts=lambda r: [
         _data(r, "requirements"),
         _data(r, "match_report"),
-        new_text_part(r["cover_letter"]),  # TEXT PART: the letter
+        labelled_text(r["cover_letter"], "cover_letter"),  # TEXT PART: the letter
+        labelled_text(r["job_ad"], "job_ad"),  # TEXT PART: the original ad, with the company description
         _cv_part(r),
     ],
     read_artifacts=_review,
