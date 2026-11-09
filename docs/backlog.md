@@ -18,10 +18,7 @@
 - **Problem:** in the demo run, the model marked SQL, PostgreSQL and CI/CD as "unclear" without a quote, although the CV lists all three word for word ("Python, SQL", "FastAPI and PostgreSQL", "GitHub Actions CI/CD"). Evidence rules 8 and 9 (no proof from bare skill lists) probably make it too cautious. A user who answers "no" by mistake turns them into "missing".
 - **Possible fix:** before asking, check in plain Python whether the requirement's exact words appear in the CV; if so, use that line as the quote and don't ask.
 - **Update (2026-11-08):** with Claude Haiku, the CV Matcher found all three with quotes and asked nothing (see [comparison-local-vs-haiku.md](comparison-local-vs-haiku.md)). The plain-Python check would still help the local model.
-
-### Willingness requirements are marked "missing" instead of asked
-- **Problem:** "occasional travel to customers (about 10%)" was marked **missing** by both the local model and Haiku in the demo run, so the candidate was never asked. Willingness (to travel, to work shifts, to be on site) can't be proven by a CV, so it should always be a question.
-- **Possible fix:** in plain Python, turn a "missing" required item into "unclear" (so it's asked) when its text matches willingness words (travel, shifts, on-site, relocate), or ask the Job Analyst to mark such items.
+- **Update (2026-11-09):** still true locally with the dummy CVs: it asked Jane Doe about RAG and Robin Sample about SQL and PostgreSQL, all stated in their CVs.
 
 ### Paused tasks are lost when the agent restarts
 - **Problem:** the in-memory task store forgets every task on restart, so answers to a paused task then fail with "task not found".
@@ -29,15 +26,30 @@
 
 ## Job Analyst
 
-### "Preferred" on experience and certificates is lost
-- **Problem:** on the non-AI ads, "*ideally* 2 years on a surgical ward" became a required `experience_details` item, and "Bilanzbuchhalter IHK *is a plus*" landed in `other_requirements`. Both read as required. The schema only has preferred *skills*, and the clean-up only checks `hard_skills_required`.
-- **Possible fix:** add `experience_preferred` and `other_preferred` fields (or a required flag per item), and run the "a plus" clean-up on every required list.
-- **Update (2026-11-08):** this is Claude Haiku's main weak spot: 10 wrong-field items on 10 ads, and every one carries a marker such as "(preferred)", "(a plus)" or "(strongly preferred)" inside `experience_details` or `other_requirements`. Running the existing clean-up on those lists would catch all of them. It changes scoring, so it needs a product decision. See [comparison-local-vs-haiku.md](comparison-local-vs-haiku.md).
-
 ### "Such as A, B or C" alternatives become separate required items
 - **Problem:** "agentic AI frameworks such as LangGraph, CrewAI, AutoGen or OpenAI Agents SDK" becomes four required items, so a CV with one of them loses points for the other three.
 - **Possible fix:** a stronger prompt rule plus a worked example, or an "any of" group in the schema that the CV Matcher counts as one item.
 - **Update (2026-11-08):** Claude Haiku keeps the frameworks example together as one item, but splits "expertise in at least two of these domains" (ad 6) into 13 separate required skills. An "any of" / "at least N of" group would fix both models.
+- **Update (2026-11-09):** after the step 1.1 prompt change, both models split ad 6's domains into separate required skills, and the local model still splits the frameworks.
+
+### Near-duplicates across fields count twice
+- **Problem:** the clean-up only removes exact duplicates.
+  - In step 1.1, Haiku listed ad 3's six "ways to stand out" items both in `experience_preferred` (as long lines) and in `hard_skills_preferred` (as short names), so they count twice as preferred points.
+  - In one demo run it listed "German" and "German language".
+- **Possible fix:** a stricter prompt rule ("each fact in exactly one field", with an example), or a plain-Python check that drops a preferred item whose words are all inside another item.
+
+### A requirement is sometimes dropped
+- **Problem:** without a temperature, Haiku's output differs between runs. In one of five demo runs it didn't list the travel requirement at all, so the candidate was never asked. The local model dropped the bartender's "availability on Friday and Saturday nights" after the step 1.1 prompt change.
+- **Possible fix:** none cheap. Missing items aren't on the scorecard yet; a "missed requirements" count would make this visible.
+
+### The local model lists duties as skills more since step 1.1
+- **Problem:** the longer prompt shifted `ministral-3:8b`:
+  - the nurse ad's duties ("Vital signs monitoring", "Wound care") became required hard skills;
+  - ad 6's duties became soft skills;
+  - ad 7's experience lines were split into fragments ("assumptions", "dependencies").
+
+  Vague items went from 13 to 15 on the 7 ads and from 2 to 5 on the made-up ads.
+- **Possible fix:** a prompt rule plus an example: "Duties from the task list are responsibilities, never skills"; then re-score.
 
 ### Prompt tested on few job types
 - **Problem:** the prompt and the clean-up were tuned on 7 English ads for senior AI roles and checked on only 3 short made-up non-AI ads (see the "Does it generalise?" section of the model comparison). German markers like "von Vorteil" worked for languages because the model handled them, but they are not in `PREFERRED_MARKER`, and "wünschenswert" or "idealerweise" are untested.
@@ -84,13 +96,18 @@
 - **Problem:** the reviewer sometimes flags something true. In the demo run, it listed "no explicit mention of SQL" as a gap although the CV lists SQL, and flagged the candidate's own wish ("I want to build RAG assistants that real customers use") as an overclaim.
 - **Possible fix:** require each overclaim to come with a CV quote or report item that **contradicts** the sentence, checked in plain Python like the other quotes. Drop overclaims without a contradiction, and skip sentences that come from the user's own answer.
 
-### The Reviewer never sees the ad's company description
-- **Problem:** the Reviewer gets only the Job Analyst's fields (title, company, skills, experience, responsibilities), not the ad's "About us" text. In the Haiku demo run, it flagged two true sentences about the company (taken from the candidate's own answer) as overclaims, because "the job data does not mention shipping data or freight companies", which the ad does.
-- **Possible fix:** pass the job ad text (or a short company description from the Job Analyst) to the Reviewer, and tell it that sentences from the user's answer are the user's own statements.
+### The Reviewer doesn't know today's date
+- **Problem:** CVs say "09/2019 - today". In one Haiku run the Reviewer counted that as "about six years" (it's seven) and flagged the true "seven years" as an overclaim, because the input has no date.
+- **Possible fix:** put today's date into the Reviewer's (and the CV Matcher's) input, in plain Python; or compute years of experience in plain Python.
 
-### Planted-error test with Sonnet as the Reviewer (planned next)
-- **Problem:** with `--preset haiku`, the Reviewer is the same model family as the agents it reviews, so it may share their blind spots. Only the plain-Python grounding checks are independent.
-- **Plan:** plant known errors in demo letters (an invented skill, a wrong number of years, a generic sentence) and measure how many each Reviewer finds: local `granite4.1:8b`, Haiku, and Claude Sonnet as an outside reviewer.
+### Verdicts vary between Haiku runs
+- **Problem:** the same strong application (Jane Doe) got shortlist, maybe, shortlist in three Haiku runs, with the same 100% score. One flagged sentence can move the verdict.
+- **Possible fix:** give the verdict a plain-Python floor from the report (e.g. no missing required items and no grounded overclaims about requirements → at least "maybe"), or run the Reviewer more than once and report the spread.
+
+### Option: Haiku agents with a Sonnet Reviewer
+- **Idea:** in the tiny planted-error test, Sonnet caught all 4 mistakes in both runs, Haiku 3 of 4 (it missed the irrelevant claim). A mixed preset would also take the Reviewer out of the agents' model family.
+- **Cost:** about $0.035 per review instead of $0.0024, so roughly $0.04 per run instead of $0.008.
+- **Before deciding:** a bigger test than one letter (more letters, more mistake types, the local `granite4.1:8b` too).
 
 ### Rewrite loop between reviewer and writer
 - **Idea:** the reviewer's overclaims and generic sentences go back to the Cover Letter Writer for a revised letter, for at most 2 rounds. The reviewer itself stays report-only.
@@ -112,6 +129,6 @@
 - **Problem:** Ctrl+C is caught in `orchestrator/__main__.py` outside the run, so the run store never writes a final status. The run folder then says `"status": "running"` forever.
 - **Possible fix:** catch the interrupt inside `run()`, call `run_store.finish("stopped", "stopped by you")`, then exit.
 
-### Spot-check the model-read Haiku scores
-- **Problem:** the Haiku column of the Job Analyst scorecard was drafted by Claude, not hand-scored. The local hand score also reads two placements and one vague item differently from the strict written rule.
-- **Next step:** spot-check the listed items in [comparison-local-vs-haiku.md](comparison-local-vs-haiku.md) and settle the strict-vs-hand reading.
+### Spot-check the model-read scores
+- **Problem:** Haiku's step 1 scores and both columns after the step 1.1 fixes were drafted by Claude, not hand-scored. (The strict reading is now applied to both columns.)
+- **Next step:** spot-check the listed items in [comparison-local-vs-haiku.md](comparison-local-vs-haiku.md).

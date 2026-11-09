@@ -60,3 +60,29 @@ Claude Haiku can now run any agent. The local models stay the default, and the c
 - **Data leaves the machine with Claude.** The job ad, the CV text, the letter and the user's answers go to Anthropic, so the README says so first. Measuring runs use only the fictional demo CV.
 
 The comparison that came with this step is in [comparison-local-vs-haiku.md](comparison-local-vs-haiku.md).
+
+## 6. Preferred fields for experience and other requirements; ask what a CV can't show; the Reviewer reads the ad
+
+Step 1 showed three gaps (see [comparison-local-vs-haiku.md](comparison-local-vs-haiku.md)). Step 1.1 fixed them:
+
+- **Two new schema fields, `experience_preferred` and `other_requirements_preferred`**, following the existing pattern of required and preferred hard skills.
+  - Before, the schema had preferred *skills* only. Preferred experience and certificates had nowhere to go, so models put them in required fields, Haiku with "(preferred)" written into the item.
+  - Now nice-to-haves go into these fields, and an empty list means none. The CV Matcher scores them as preferred (1 point).
+  - The marker clean-up stays as a safety net and now runs on all three required lists. In the re-run it didn't have to move anything.
+  - **Result:** wrong-field items on 10 ads went from 5 (local) and 10 (Haiku) to 0 for both.
+- **What a CV can't show is always asked.** Willingness to travel or relocate, a start date, availability and shifts are matched by keywords in plain Python.
+  - Such an item is never "missing", only "unclear", and these questions come first, even for preferred items.
+  - Plain Python, not a prompt rule, because it must hold for every model.
+  - **Result:** travel was asked in 7 of 8 end-to-end runs. In the 8th, the Job Analyst hadn't listed travel at all.
+- **The Reviewer gets the original job ad** (with the company description) as a labelled text part, next to the Job Analyst's fields.
+  - Without it, the Reviewer flagged true company facts as overclaims, and couldn't spot false ones.
+  - The two text parts (letter and ad) are told apart by part metadata (`{"content": "job_ad"}`), which keeps it plain A2A.
+
+**The Reviewer result** (a tiny planted-error test, details in the comparison):
+- Haiku caught 3 of 4 planted mistakes in both runs. It missed the irrelevant claim.
+- Sonnet (`claude-sonnet-5-5`) caught all 4 in both runs, at about 15 times the cost per review ($0.035 against $0.0024). Neither raised a false alarm.
+- The wrong company fact was caught by every run, which the new ad-text input made possible.
+
+Nothing is decided from four runs: the presets stay as they are. A mixed set-up (Haiku agents, Sonnet Reviewer) is on the backlog as an option, as is giving the Reviewer today's date.
+
+**No refusal fallback for Sonnet.** The API can retry a refused request on another model. The adapter doesn't use that, because it would switch models silently and the budget guard prices each call by model. A refusal fails the step with a clear message instead.

@@ -10,15 +10,16 @@ I built it as a learning project for A2A and multi-agent design, so the code is 
 
 ## What it does
 
-1. **Job Analyst**: reads a job ad and returns its requirements as structured JSON: job title, company, education, years of experience, hard skills (required vs. preferred), soft skills, languages, responsibilities, travel and certifications.
+1. **Job Analyst**: reads a job ad and returns its requirements as structured JSON: job title, company, education, years of experience, hard skills, soft skills, languages, responsibilities, travel and certifications. Skills, experience and other requirements each come as a required and a preferred list.
 2. **CV Matcher**: takes those requirements plus a CV (PDF) and checks every requirement against the CV:
    - Each item is **found** (with an exact quote from the CV as proof), **missing**, or **unclear**.
-   - If required items are unclear, the task **pauses** and asks the user up to 5 yes/no questions (A2A `input-required`). The answers continue the same task.
+   - What a CV can't show (willingness to travel or relocate, start date, availability) is never "missing": it's **unclear**, so the candidate is asked.
+   - If items are unclear, the task **pauses** and asks the user up to 5 yes/no questions (A2A `input-required`): the things a CV can't show first, then unclear required items. The answers continue the same task.
    - The result is a match score (required items count 2, preferred count 1) and a short report.
 3. **Cover Letter Writer**: asks the user one free-text question ("why this role?"), then writes a three-paragraph letter from the matched and confirmed items only:
    - Every factual claim must come with an exact quote from the CV or from the user's answer, checked in plain Python. Unproven claims trigger one rewrite.
    - A plain-Python style check fixes dashes and warns about buzzwords, length and structure.
-4. **Application Reviewer**: acts as a senior recruiter for the job (locally a different model, `granite4.1:8b`, at temperature 0) and only reports, never rewrites:
+4. **Application Reviewer**: acts as a senior recruiter for the job (locally a different model, `granite4.1:8b`, at temperature 0). It reads the original job ad, including the company description, next to the Job Analyst's requirements, and only reports, never rewrites:
    - a verdict (shortlist / maybe / reject) with a one-sentence reason, the top 3 weaknesses, overclaims and generic sentences in the letter, whether paragraph 3 is company-specific, and 3 to 5 likely interview questions;
    - every quoted letter sentence is checked in plain Python against the letter, and items that don't match are dropped and counted. A plain-Python list of known clichés backs up the model.
 5. **Orchestrator**: runs all four in a fixed order with one command, answers the agents' questions through the terminal (or from a file, for repeatable runs), and saves the whole run, with the model, tokens, cost and time of every step.
@@ -75,23 +76,28 @@ I built it as a learning project for A2A and multi-agent design, so the code is 
   - Every Claude call is checked before it's made and counted right after it, with real usage. The totals live in `results/cloud_spend.json` (gitignored).
   - The limits are $0.50 per run and $3.00 in total (`BUDGET_PER_RUN_USD`, `BUDGET_TOTAL_USD`). A call that could pass a limit isn't made; the step fails and the orchestrator stops cleanly.
   - The four agent processes take turns on the file, under a lock.
+  - To start a new budget period (e.g. a new upgrade step), move the file away, e.g. to `results/cloud_spend_step1.json`, and set the limit for the step in `.env`.
 - **What is different on Claude:**
   - **No temperature.** The API version the SDK uses no longer accepts one, so Haiku runs at its defaults (adaptive thinking, default effort), and its runs aren't exactly repeatable.
   - **Adapted schemas.** The JSON schemas are the same, but the API doesn't enforce array lengths. Those limits go into the field descriptions and are checked in plain Python afterwards.
-  - **Prices** (Claude Haiku 5.5, checked 2026-11-08): $0.10 per million input tokens and $0.50 per million output tokens; thinking counts as output.
+  - **Prices** (checked on Anthropic's pricing page), per million tokens, thinking counted as output:
+    - Claude Haiku 5.5: $0.10 in, $0.50 out (2026-11-08);
+    - Claude Sonnet 5.5: $2 in, $10 out (2026-11-09; used only in the Reviewer test).
 
-**Local vs Haiku** (full write-up: [docs/comparison-local-vs-haiku.md](docs/comparison-local-vs-haiku.md)). The Job Analyst numbers use the existing scorecard on 7 real AI job ads; Haiku's scores are model-read, pending a human spot-check. End to end means one run each on the fictional demo, with the same scripted answers.
+**Local vs Haiku** (full write-up, before and after the step 1.1 fixes: [docs/comparison-local-vs-haiku.md](docs/comparison-local-vs-haiku.md)).
+- The Job Analyst numbers use the existing scorecard (strict reading) on 7 real AI job ads. "After" scores are model-read, pending a human spot-check.
+- End to end means fictional CVs with scripted answers, compared with expected outcomes written before the runs.
 
 | | Local | Haiku |
 |---|---|---|
-| Job Analyst: items in the wrong field (7 ads) | 1 | 7 |
-| Job Analyst: vague items / invented facts (7 ads) | 12 / 0 | 3 / 0 |
-| Job Analyst: seconds per ad, cost per ad | 22.4 s, $0 | 8.0 s, ~$0.001 |
-| Demo end to end: score, verdict | 87%, shortlist | 88%, maybe |
-| Demo end to end: claims proven / unproven, reviewer items dropped | 9 / 0, 0 | 12 / 0, 0 |
-| Demo end to end: total time, cost | 116 s, $0 | 54 s, $0.008 |
+| Job Analyst, 7 ads: wrong field, before → after the fixes | 3 → **0** | 7 → **0** |
+| Job Analyst, 7 ads: vague items / invented facts, after | 15 / 0 | 5 / 0 |
+| Job Analyst: seconds per ad, cost per ad | 24 s, $0 | 8 s, ~$0.001 |
+| Dummy CVs (expected: strong 85–100% shortlist, medium 55–75% maybe, weak 0–20% reject) | 100% shortlist, 74% maybe, 10% reject | 100% shortlist, 76% maybe, 3% reject |
+| Same strong CV run 3 times (Haiku) | | score 100% each time; verdict shortlist, maybe, shortlist |
+| End-to-end time, cost per run (average) | 2.4 min, $0 | 53 s, $0.0075 |
 
-Haiku writes cleaner, shorter requirement lists and is about three times faster. But it puts "preferred" experience and certificates into required fields, marked "(preferred)", which a small clean-up change could fix.
+Both models now put preferred experience and certificates in the right fields. Haiku writes cleaner requirement lists and is about three times faster. Its verdicts vary between runs of the same application, though.
 
 ## Project layout
 
@@ -192,7 +198,14 @@ python -m orchestrator samples/demo/job_ad_demo.txt samples/demo/cv_demo.pdf    
 python -m orchestrator samples/demo/job_ad_demo.txt samples/demo/cv_demo.pdf --answers samples/demo/answers_demo.json
 ```
 
-Measuring runs (model comparisons) use only these demo files, never a real CV.
+Measuring runs (model comparisons) use only these demo files, never a real CV:
+- **Three more fictional CVs** for the same ad, made by the same script:
+  - `cv_jane_doe.pdf`: strong fit;
+  - `cv_robin_sample.pdf`: medium fit;
+  - `cv_casey_placeholder.pdf`: weak fit.
+
+  Each has its own scripted answers (`answers_<name>.json`), and their expected outcomes were written before any run (`expected_outcomes.md`).
+- **`planted_errors/`:** a tiny Reviewer test, a letter with 4 planted mistakes (see [the comparison](docs/comparison-local-vs-haiku.md#c-planted-errors-a-tiny-reviewer-test-step-11)).
 
 An excerpt of a real run (answers given as the fictional candidate: "yes" to SQL, PostgreSQL and CI/CD, which the CV lists):
 
@@ -256,11 +269,12 @@ See [docs/backlog.md](docs/backlog.md) for the full list with possible fixes. Th
 - **Split alternatives:** the Job Analyst turns "such as A, B or C" into separate required items.
 - **Lost pauses:** paused tasks are lost when an agent restarts, because the task store is in memory.
 - **Narrow testing:** the prompts were tuned on 7 senior AI job ads in English, plus a small check on 3 made-up non-AI ads.
-- **Reviewer false positives:** the reviewer sometimes flags a true statement (e.g. "no SQL" when the CV lists SQL), or a stated wish as an overclaim. Its findings are a second opinion, not facts. It also never sees the ad's company description, so true company facts in the letter can look invented.
+- **Reviewer false positives and shifting verdicts:** the reviewer sometimes flags a true statement (e.g. "no SQL" when the CV lists SQL), or a stated wish as an overclaim. It doesn't know today's date, so it can miscount years "until today". With Haiku, the verdict for the same application can change between runs. Its findings are a second opinion, not facts.
 - **Same model family reviewing itself (with Haiku):**
   - With `--preset haiku`, the Application Reviewer is the same model family as the agents whose work it reviews, so it may share their blind spots. Locally it is a different model on purpose.
   - The grounding checks in plain Python (every quote must exist in the CV or the letter) are the independent layer.
-  - Planned next: a planted-error test with Sonnet as the Reviewer.
-- **"Preferred" lost outside skills:** the schema has preferred *skills* only, so preferred experience and certificates land in required fields (rare locally, frequent with Haiku).
+  - **A tiny planted-error test** (one letter, 4 mistakes, 2 runs each):
+    - Haiku caught the three factual mistakes (inflated years, a skill not in the CV, a wrong company fact) but not an irrelevant claim;
+    - Sonnet caught all four, at about 15 times the cost.
 - **Unchecked sentences:** the Cover Letter Writer only checks the claims the model lists itself; a factual sentence that isn't on the list is not checked.
 - **Terminal only:** the orchestrator asks its questions in the terminal; there is no web front end yet.

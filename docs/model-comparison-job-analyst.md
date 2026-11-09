@@ -1,6 +1,6 @@
 # Model comparison: Job Analyst (2026-10-22)
 
-> **Later:** local vs Claude Haiku on the same ads, with this scorecard, is in [comparison-local-vs-haiku.md](comparison-local-vs-haiku.md) (2026-11-08).
+> **Later:** local vs Claude Haiku on the same ads, with this scorecard read strictly, before and after the step 1.1 schema fixes, is in [comparison-local-vs-haiku.md](comparison-local-vs-haiku.md) (2026-11-08 and 2026-11-09).
 
 Three local models, same prompt (`prompts/job_analyst.md`, identical copy in each results folder), same 7 job ads in `samples/`, agent version 0.3.0, temperature 0. Every run finished with `TASK_STATE_COMPLETED`.
 
