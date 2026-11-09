@@ -6,6 +6,12 @@ With tracing on, one pipeline run becomes **one trace**: a tree of timed steps (
 
 Tracing is **off by default**. Off, nothing is set up and the program behaves exactly as without it.
 
+| Jaeger: the expanded trace, 5 services, two waits for the user | Phoenix: the Cover Letter Writer's model call, input and output |
+|---|---|
+| ![One run in Jaeger](images/trace-jaeger.png) | ![The letter writer's model call in Phoenix](images/trace-phoenix.png) |
+
+Both pictures show the same run (2026-11-09): the fictional Jane Doe on Claude Haiku in Docker, with content recording on. A script typed the answers after pauses of 10 s and 8 s, so the waits for the user are visible. Trace `1eeda9ef8b565efe68bf0001b2e219b8`, 75 spans, $0.0082.
+
 ## How to turn it on
 
 **With Docker** (the agents in containers, the viewers next to them):
@@ -142,9 +148,9 @@ status_code == 'ERROR'
 - **The SDK's internal spans are left out.** Its event queue and task manager make about 240 spans per run with nothing for us. A span processor drops them; the client and server spans stay, and no kept span loses its parent. A run has about 75 spans.
 - **Two exporters, one per viewer,** both OTLP over HTTP. Each warns once if its viewer doesn't take a batch, and never raises into the run.
 
-## Demo traces (2026-11-09)
+## Demo traces (step 2, 2026-11-09)
 
-Jane Doe (fictional) with Claude Haiku in Docker, tracing on:
+Jane Doe (fictional) with Claude Haiku in Docker, tracing on. These were checked when they were made; the stack has been restarted since, so the ids no longer open:
 
 | Run | Content | Answers | Trace id | Cost |
 |---|---|---|---|---|

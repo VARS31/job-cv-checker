@@ -28,7 +28,7 @@ Other choices that follow from this:
 
 The fourth agent reviews the whole application like a senior recruiter: verdict, top weaknesses, overclaims, generic sentences, company specificity and likely interview questions. It never rewrites the letter, so it can't introduce new unproven claims, and its findings stay a second opinion for the user.
 
-- **A different model** (`granite4.1:8b`, temperature 0) than the writer (`ministral-3:8b`), so the reviewer doesn't share the writer's blind spots. It also had 0 invented facts in the Job Analyst comparison. (With `--preset haiku`, all four agents use the same model family; see decision 5 and the README's known limitations.)
+- **A different model** (`granite4.1:8b`, temperature 0) than the writer (`ministral-3:8b`), so the reviewer doesn't share the writer's blind spots. It also had 0 invented facts in the Job Analyst comparison. (With `--preset haiku`, all four agents use the same model family; `--preset haiku-sonnet` gives the Reviewer a different one again, see decision 8.)
 - **No score, a verdict.** "Shortlist / maybe / reject" plus one sentence is what a recruiter actually decides. The CV Matcher already gives the percentage.
 - **Grounded quotes.** Every overclaim and generic sentence must be quoted from the letter. Plain Python checks each quote with the shared quote check, drops the ones that aren't in the letter, and counts them in `dropped_ungrounded`.
 - **Model plus a plain-Python safety net.** The letter is given to the model as numbered sentences, so it judges each one. A short list of known clichés ("perfect fit", "I thrive"…) is also checked in plain Python, because even at temperature 0 a small model skips sentences.
@@ -43,7 +43,7 @@ Claude Haiku can now run any agent. The local models stay the default, and the c
   - Each agent reads its model from its settings once, at startup (`JOB_ANALYST_MODEL` and so on).
   - It reports the model, tokens and cost in its result metadata (`model_usage`).
   - The orchestrator records that per step in `run_log.json`, but never chooses a model.
-  - `scripts/start_agents.py --preset local|haiku` sets all four at once (default `local`), so switching is one flag.
+  - `scripts/start_agents.py --preset local|haiku` sets all four at once (default `local`), so switching is one flag. A third preset, `haiku-sonnet`, came later (decision 8).
 - **The name decides the provider.** A name starting with `claude-` means Claude; anything else means Ollama. Both sit behind the same `ask_model()` in `agents/model_client.py`, so the agents and the prompts didn't change.
 - **No silent fallback.**
   - An agent with a Claude model checks `ANTHROPIC_API_KEY` at startup, with a free model lookup.
@@ -83,7 +83,7 @@ Step 1 showed three gaps (see [comparison-local-vs-haiku.md](comparison-local-vs
 - Sonnet (`claude-sonnet-5-5`) caught all 4 in both runs, at about 15 times the cost per review ($0.035 against $0.0024). Neither raised a false alarm.
 - The wrong company fact was caught by every run, which the new ad-text input made possible.
 
-Nothing is decided from four runs: the presets stay as they are. A mixed set-up (Haiku agents, Sonnet Reviewer) is on the backlog as an option, as is giving the Reviewer today's date.
+Nothing is decided from four runs: the presets stay as they are. A mixed set-up (Haiku agents, Sonnet Reviewer) and giving the Reviewer today's date went on the backlog. Both followed later: today's date in decision 7, the mixed preset in decision 8.
 
 **No refusal fallback for Sonnet.** The API can retry a refused request on another model. The adapter doesn't use that, because it would switch models silently and the budget guard prices each call by model. A refusal fails the step with a clear message instead.
 
@@ -97,8 +97,8 @@ Step 2 added a way to run the agents in containers and to see one run as one tra
 - **Everything is published on 127.0.0.1 only.** Inside a container an agent listens on 0.0.0.0, but its agent card keeps saying `http://localhost:<port>`.
 - **Nothing private reaches the image.**
   - `.dockerignore` denies everything and allows only `agents/`, `prompts/` and `requirements.txt`. The image was listed after the build: no `.env`, no CVs, no results, no key.
-  - The key reaches the containers only as an environment variable at start, and only with the haiku preset.
-- **The preset is chosen at start** (`docker_up.py --preset local|haiku`, default local), with the same presets as `start_agents.py`.
+  - The key reaches the containers only as an environment variable at start, and only with a Claude preset (`haiku` or `haiku-sonnet`).
+- **The preset is chosen at start** (`docker_up.py --preset local|haiku|haiku-sonnet`, default local), with the same presets as `start_agents.py`.
 - **The budget lock had to change.** The four containers share `results/` with the Mac, but `fcntl.flock` doesn't reach across containers on Docker Desktop's file sharing (tested: two containers both got it). The guard now uses a lock file created with `O_CREAT|O_EXCL`, which is exclusive across containers and the Mac (tested), with stale-lock removal.
 
 **Tracing:**
@@ -111,3 +111,19 @@ Step 2 added a way to run the agents in containers and to see one run as one tra
 - **A viewer that's down costs one warning,** never the run.
 
 **Today's date** now goes into the inputs of the agents that read CVs (CV Matcher, Cover Letter Writer, Reviewer), so "09/2019 - today" is counted from the real date. The Reviewer had miscounted it in step 1.1.
+
+## 8. A third preset: Haiku agents, Sonnet Reviewer
+
+`--preset haiku-sonnet` runs Claude Haiku for the Job Analyst, CV Matcher and Cover Letter Writer, and Claude Sonnet for the Application Reviewer. The default stays `local`.
+
+- **Why:**
+  - With `--preset haiku`, the Reviewer is the same model family as the agents whose work it reviews, so it may share their blind spots. Locally that never happens: the Reviewer is `granite4.1:8b` and the others are `ministral-3:8b` (decision 4).
+  - A Reviewer from another family is the cheapest step back to a second opinion, and it changes nothing else.
+  - The tiny planted-error test pointed the same way (decision 6): Sonnet caught all 4 mistakes in both runs, including the irrelevant claim; Haiku caught 3 of 4.
+- **The same safety as the other Claude preset:** every agent checks `ANTHROPIC_API_KEY` and its own model at startup (a free model lookup), and every call goes through the budget guard. Sonnet's price was checked on the live pricing page before the guard used it ($2 / $10 per million tokens, 2026-11-09).
+- **Cost and speed** (one Jane Doe run with scripted answers, 2026-11-09):
+  - $0.038 in 44 s, of which the Sonnet review was $0.034;
+  - about five times the `haiku` preset ($0.006–$0.009 per run);
+  - `local` costs nothing.
+- **Why it's an option, not the default:** it costs money and sends the job ad, the CV text and the letter to Anthropic, like any Claude preset. And the evidence is a tiny test (one letter, two runs per model), not a measurement.
+

@@ -179,6 +179,20 @@ Same Reviewer agent, same prompt, same input; only the model changed.
 
 **Call it what it is:** one letter, four mistakes, two runs per model. It shows that the ad-text fix lets a reviewer catch a wrong company fact, and that Sonnet noticed irrelevance where Haiku didn't, here. It doesn't measure reviewer quality.
 
+## (d) The haiku-sonnet preset (step 3, 2026-11-09)
+
+After the planted-error test, a third preset gives the Reviewer a different model family: Claude Haiku for the first three agents, Claude Sonnet for the Reviewer ([decisions.md](decisions.md), decision 8).
+
+**One check run:** Jane Doe, scripted answers, Docker.
+
+| | `haiku` (Jane Doe runs so far) | `haiku-sonnet` (one run) |
+|---|---|---|
+| Score, verdict | 100%; shortlist or maybe | 100%, shortlist |
+| Time | 45–60 s | 44 s |
+| Cost | $0.006–$0.009 | $0.038 (the Sonnet review: $0.034) |
+
+In that run, Haiku's Job Analyst again left out the travel requirement, so nothing was asked. That's now 2 of 11 Haiku runs on the demo ad (backlog item 3). One run is an example of the preset working, not a comparison.
+
 ## Step 1 details (before the fixes, 2026-11-08)
 
 **Haiku's wrong-field items (10).** Each was a preferred item in a required field, marked as such:
