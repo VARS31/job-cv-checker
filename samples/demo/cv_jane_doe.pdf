@@ -1,0 +1,82 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [6 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Length 2746 >>
+stream
+BT
+14 TL
+56 786 Td
+/F1 10 Tf () Tj T*
+/F2 12 Tf (Jane Doe) Tj T*
+/F1 10 Tf (Senior Backend Engineer \(Python & LLMs\)  |  Hamburg, Germany  |  jane.doe@example.com) Tj T*
+/F1 10 Tf (\(Fictional demo CV. The person, companies and university do not exist.\)) Tj T*
+/F1 10 Tf () Tj T*
+/F2 12 Tf (Summary) Tj T*
+/F1 10 Tf (Backend engineer with 7 years of professional experience in Python. For the last three years) Tj T*
+/F1 10 Tf (I have built LLM features in production, including a customer-facing retrieval-augmented) Tj T*
+/F1 10 Tf (\(RAG\) assistant that answers questions from product documentation.) Tj T*
+/F1 10 Tf () Tj T*
+/F2 12 Tf (Experience) Tj T*
+/F1 10 Tf (Senior Backend Engineer, Cargoline Digital GmbH, Hamburg  |  01/2022 - today) Tj T*
+/F1 10 Tf (- Designed and built REST APIs in Python with FastAPI and PostgreSQL for a freight booking) Tj T*
+/F1 10 Tf (   platform used by 300 business customers.) Tj T*
+/F1 10 Tf (- Built a customer-facing RAG assistant over 6,000 help articles with pgvector and an LLM) Tj T*
+/F1 10 Tf (   API; it now answers 40% of customer questions without a support agent.) Tj T*
+/F1 10 Tf (- Created an evaluation set of 300 real customer questions and a weekly report on answer) Tj T*
+/F1 10 Tf (   quality.) Tj T*
+/F1 10 Tf (- Containerised all services with Docker and run them on Kubernetes on AWS \(EKS\), deployed) Tj T*
+/F1 10 Tf (   with GitLab CI/CD.) Tj T*
+/F1 10 Tf (- Mentored three engineers and led the team's API design reviews.) Tj T*
+/F1 10 Tf (Backend Developer, Brightquay Software GmbH, Bremen  |  09/2019 - 12/2021) Tj T*
+/F1 10 Tf (- Developed Django REST APIs and PostgreSQL databases for logistics customers.) Tj T*
+/F1 10 Tf (- Wrote SQL reports and data migrations; introduced automated tests with pytest.) Tj T*
+/F1 10 Tf (- Took part in customer workshops to turn requirements into API designs.) Tj T*
+/F1 10 Tf () Tj T*
+/F2 12 Tf (Education) Tj T*
+/F1 10 Tf (M.Sc. Computer Science, Example Technical University, Hamburg  |  2017 - 2019) Tj T*
+/F1 10 Tf (B.Sc. Computer Science, Example Technical University, Hamburg  |  2014 - 2017) Tj T*
+/F1 10 Tf () Tj T*
+/F2 12 Tf (Skills) Tj T*
+/F1 10 Tf (Languages: Python, SQL, TypeScript) Tj T*
+/F1 10 Tf (Frameworks: FastAPI, Django, pytest) Tj T*
+/F1 10 Tf (Data: PostgreSQL, pgvector, Redis) Tj T*
+/F1 10 Tf (Cloud & DevOps: Docker, Kubernetes, AWS, GitLab CI/CD) Tj T*
+/F1 10 Tf (AI: LLM APIs, retrieval-augmented generation \(RAG\), embeddings, evaluation of LLM answers) Tj T*
+/F1 10 Tf () Tj T*
+/F2 12 Tf (Languages) Tj T*
+/F1 10 Tf (English: fluent \(C2\)) Tj T*
+/F1 10 Tf (German: fluent \(C1\)) Tj T*
+/F1 10 Tf () Tj T*
+/F2 12 Tf (Volunteering) Tj T*
+/F1 10 Tf (Maintains the website of a local rowing club.) Tj T*
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 5 0 R >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000212 00000 n 
+0000000314 00000 n 
+0000003112 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+3248
+%%EOF

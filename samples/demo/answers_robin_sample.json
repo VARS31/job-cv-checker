@@ -1,0 +1,39 @@
+{
+  "about": "Scripted answers for the fictional Robin Sample (cv_robin_sample.pdf) applying to job_ad_demo.txt. Yes to what the CV supports (Java and PostgreSQL backend, Python scripts, Docker, GitHub Actions, an LLM hackathon prototype) and to travel and the Hamburg office; no to FastAPI, Django, RAG, cloud, Kubernetes and LLM evaluation, which the CV doesn't show. 'No' rules are checked first, so 'LLMs and RAG' is a no.",
+  "yes_no": {
+    "no_if_question_contains": [
+      "FastAPI",
+      "Django",
+      "RAG",
+      "retrieval",
+      "AWS",
+      "Azure",
+      "Kubernetes",
+      "evaluation",
+      "Master"
+    ],
+    "yes_if_question_contains": [
+      "Python",
+      "SQL",
+      "PostgreSQL",
+      "REST",
+      "LLM",
+      "Docker",
+      "CI/CD",
+      "years",
+      "backend",
+      "Bachelor",
+      "Computer Science",
+      "English",
+      "German",
+      "travel",
+      "hybrid",
+      "Hamburg",
+      "office",
+      "customer",
+      "product"
+    ],
+    "otherwise": "no"
+  },
+  "free_text": "I want to move from internal Java systems into AI engineering, and Lumenpath's new AI team would let me build LLM features on real shipping data and support knowledge."
+}

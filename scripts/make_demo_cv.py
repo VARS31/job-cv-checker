@@ -1,17 +1,23 @@
-"""Create the fictional demo CV as a PDF (samples/demo/cv_demo.pdf), without extra packages.
+"""Create the fictional demo CVs as PDFs in samples/demo/, without extra packages.
 
 Run with:  python scripts/make_demo_cv.py
-Everything in this CV is made up: the person, the companies, the school and the contact details.
-Writes a simple text PDF by hand (Helvetica, A4), which pypdf can read like any other PDF.
+Everything in these CVs is made up: the people, the companies, the schools and the contact details.
+Writes simple text PDFs by hand (Helvetica, A4), which pypdf can read like any other PDF.
+
+The CVs, all for the fictional demo ad samples/demo/job_ad_demo.txt:
+- cv_demo.pdf             Jordan Example: the original demo CV
+- cv_jane_doe.pdf         Jane Doe: a strong fit
+- cv_robin_sample.pdf     Robin Sample: a medium fit
+- cv_casey_placeholder.pdf  Casey Placeholder: a weak fit
 """
 
 import textwrap
 from pathlib import Path
 
-OUT_FILE = Path(__file__).resolve().parent.parent / "samples" / "demo" / "cv_demo.pdf"
+OUT_DIR = Path(__file__).resolve().parent.parent / "samples" / "demo"
 
 # "# " = heading (bold). Plain ASCII only, so the built-in PDF fonts can show every character.
-CV = """\
+JORDAN_EXAMPLE = """\
 # Jordan Example
 Backend & AI Engineer  |  Hamburg, Germany  |  jordan.example@example.com
 (Fictional demo CV. The person, companies and school do not exist.)
@@ -46,6 +52,107 @@ AI: LLM APIs, retrieval-augmented generation (RAG), embeddings, prompt design, a
 # Languages
 English: fluent (C1)
 German: basic (A2)
+"""
+
+JANE_DOE = """\
+# Jane Doe
+Senior Backend Engineer (Python & LLMs)  |  Hamburg, Germany  |  jane.doe@example.com
+(Fictional demo CV. The person, companies and university do not exist.)
+
+# Summary
+Backend engineer with 7 years of professional experience in Python. For the last three years I have built LLM features in production, including a customer-facing retrieval-augmented (RAG) assistant that answers questions from product documentation.
+
+# Experience
+Senior Backend Engineer, Cargoline Digital GmbH, Hamburg  |  01/2022 - today
+- Designed and built REST APIs in Python with FastAPI and PostgreSQL for a freight booking platform used by 300 business customers.
+- Built a customer-facing RAG assistant over 6,000 help articles with pgvector and an LLM API; it now answers 40% of customer questions without a support agent.
+- Created an evaluation set of 300 real customer questions and a weekly report on answer quality.
+- Containerised all services with Docker and run them on Kubernetes on AWS (EKS), deployed with GitLab CI/CD.
+- Mentored three engineers and led the team's API design reviews.
+
+Backend Developer, Brightquay Software GmbH, Bremen  |  09/2019 - 12/2021
+- Developed Django REST APIs and PostgreSQL databases for logistics customers.
+- Wrote SQL reports and data migrations; introduced automated tests with pytest.
+- Took part in customer workshops to turn requirements into API designs.
+
+# Education
+M.Sc. Computer Science, Example Technical University, Hamburg  |  2017 - 2019
+B.Sc. Computer Science, Example Technical University, Hamburg  |  2014 - 2017
+
+# Skills
+Languages: Python, SQL, TypeScript
+Frameworks: FastAPI, Django, pytest
+Data: PostgreSQL, pgvector, Redis
+Cloud & DevOps: Docker, Kubernetes, AWS, GitLab CI/CD
+AI: LLM APIs, retrieval-augmented generation (RAG), embeddings, evaluation of LLM answers
+
+# Languages
+English: fluent (C2)
+German: fluent (C1)
+
+# Volunteering
+Maintains the website of a local rowing club.
+"""
+
+ROBIN_SAMPLE = """\
+# Robin Sample
+Software Developer  |  Hamburg, Germany  |  robin.sample@example.com
+(Fictional demo CV. The person, companies and university do not exist.)
+
+# Summary
+Software developer with 3 years of professional experience building backend services in Java, plus Python for data scripts. I want to move into AI engineering and built a small chatbot prototype with an LLM API at a hackathon.
+
+# Experience
+Software Developer, Havenlight Insurance IT GmbH, Hamburg  |  09/2023 - today
+- Develop REST APIs in Java with Spring Boot and a PostgreSQL database for an internal claims system.
+- Write Python scripts that clean and import data from partner files.
+- Package services with Docker; changes are built and tested with GitHub Actions and deployed to an on-premises server.
+
+# Projects
+Hackathon 2025: a chatbot prototype that answers questions about insurance terms, using an LLM API (no retrieval, no evaluation).
+
+# Education
+B.Sc. Business Informatics, Example University of Applied Sciences, Hamburg  |  2019 - 2023
+
+# Skills
+Languages: Java, Python, SQL
+Frameworks: Spring Boot, Flask
+Data: PostgreSQL
+Tools: Docker, GitHub Actions, Git
+
+# Languages
+English: very good (C1)
+German: native
+"""
+
+CASEY_PLACEHOLDER = """\
+# Casey Placeholder
+Frontend Developer  |  Munich, Germany  |  casey.placeholder@example.com
+(Fictional demo CV. The person, companies and university do not exist.)
+
+# Summary
+Frontend developer with 2 years of experience building online shops in React and TypeScript.
+
+# Experience
+Frontend Developer, Pinecrest Commerce GmbH, Munich  |  01/2024 - today
+- Build product pages and checkout flows in React and TypeScript for online shops.
+- Work with designers on accessible, responsive layouts in Figma and CSS.
+- Write unit tests with Jest.
+
+Intern, Brightfield Media Agency, Munich  |  07/2023 - 12/2023
+- Built landing pages with HTML, CSS and JavaScript.
+
+# Education
+B.A. Media Design, Example University of Applied Sciences, Munich  |  2020 - 2023
+
+# Skills
+Languages: TypeScript, JavaScript, HTML, CSS
+Frameworks: React, Next.js, Jest
+Tools: Git, Figma
+
+# Languages
+English: good (B2)
+German: native
 """
 
 PAGE_WIDTH, PAGE_HEIGHT = 595, 842  # A4 in points
@@ -107,7 +214,15 @@ def build_pdf(pages: list[list[tuple[str, str]]]) -> bytes:
     return pdf
 
 
+CVS = {
+    "cv_demo.pdf": JORDAN_EXAMPLE,
+    "cv_jane_doe.pdf": JANE_DOE,
+    "cv_robin_sample.pdf": ROBIN_SAMPLE,
+    "cv_casey_placeholder.pdf": CASEY_PLACEHOLDER,
+}
+
 if __name__ == "__main__":
-    OUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    OUT_FILE.write_bytes(build_pdf(layout(CV)))
-    print(f"Wrote {OUT_FILE}")
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    for filename, cv in CVS.items():
+        (OUT_DIR / filename).write_bytes(build_pdf(layout(cv)))
+        print(f"Wrote {OUT_DIR / filename}")

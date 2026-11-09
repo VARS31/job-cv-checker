@@ -1,0 +1,18 @@
+{
+  "about": "Scripted answers for the fictional Casey Placeholder (cv_casey_placeholder.pdf) applying to job_ad_demo.txt. Casey is a frontend developer in Munich: yes only to travel and German; no to every backend, cloud and AI item, to fluent English (B2) and to 3 days in the Hamburg office.",
+  "yes_no": {
+    "no_if_question_contains": [
+      "Hamburg",
+      "office",
+      "hybrid",
+      "relocat",
+      "English"
+    ],
+    "yes_if_question_contains": [
+      "travel",
+      "German"
+    ],
+    "otherwise": "no"
+  },
+  "free_text": "I would like to move from frontend work into backend and AI development, and Lumenpath's customer-facing tools sound like a good place to learn."
+}

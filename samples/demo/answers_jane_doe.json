@@ -1,0 +1,38 @@
+{
+  "about": "Scripted answers for the fictional Jane Doe (cv_jane_doe.pdf) applying to job_ad_demo.txt. Every 'yes' is something her CV supports, plus her willingness to travel and to work 3 days in the Hamburg office (she lives in Hamburg). Terraform is not in her CV: no.",
+  "yes_no": {
+    "no_if_question_contains": [
+      "Terraform"
+    ],
+    "yes_if_question_contains": [
+      "Python",
+      "SQL",
+      "FastAPI",
+      "Django",
+      "REST",
+      "LLM",
+      "RAG",
+      "retrieval",
+      "Docker",
+      "CI/CD",
+      "AWS",
+      "Kubernetes",
+      "Computer Science",
+      "Bachelor",
+      "Master",
+      "years",
+      "backend",
+      "English",
+      "German",
+      "evaluation",
+      "travel",
+      "hybrid",
+      "Hamburg",
+      "office",
+      "customer",
+      "product"
+    ],
+    "otherwise": "no"
+  },
+  "free_text": "I have spent three years building a customer-facing RAG assistant for a freight booking platform, and Lumenpath's plan to answer customer questions from your documentation is the same problem at a larger scale. I want to keep building software that freight companies use every day."
+}
