@@ -4,18 +4,23 @@ Real usage is counted after every call, and the running totals are kept in one f
 (results/cloud_spend.json, gitignored), so the limits hold across runs and restarts.
 A call that could take its run or the total past a limit isn't made.
 
-Four agent processes share the file, so paid calls take turns: a lock (fcntl.flock on a separate
-lock file) is held from the check, through the call, until its cost is written. The pipeline calls
-one agent at a time anyway, so in practice nobody waits. The file is replaced in one step, so
-stopping at any moment can't leave half a ledger.
+Four agent processes share the file, so paid calls take turns: a lock is held from the check, through
+the call, until its cost is written. The pipeline calls one agent at a time anyway, so in practice
+nobody waits. The file is replaced in one step, so stopping at any moment can't leave half a ledger.
+
+The lock is a lock FILE created with O_CREAT|O_EXCL ("create it only if it doesn't exist"), not
+fcntl.flock: in Docker on a Mac, the agents run in four containers that share results/ through
+Docker Desktop's file sharing, and flock doesn't reach across containers there. An exclusive create
+does, also between the containers and the Mac (tested). A lock left behind by a process that died is
+removed after LOCK_STALE_SECONDS.
 
 Local models cost nothing and never come through here. Nothing about the API key reaches this file.
 """
 
 import asyncio
-import fcntl
 import json
 import os
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -37,6 +42,8 @@ PRICES = {
     },
 }
 WORST_CASE_CHARS_PER_TOKEN = 2  # a token is never less than half a character, so this over-estimates
+LOCK_POLL_SECONDS = 0.05
+LOCK_STALE_SECONDS = 15 * 60  # longer than any call can take (model calls time out after at most 5 minutes)
 
 
 class BudgetExceeded(Exception):
@@ -116,6 +123,32 @@ class Budget:
         temporary.write_text(json.dumps(ledger, indent=1) + "\n", encoding="utf-8")
         os.replace(temporary, self.path)
 
+    async def _acquire(self) -> None:
+        """Take the lock: create the lock file, which only one process can do. Others wait."""
+        while True:
+            try:
+                handle = os.open(self.lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            except FileExistsError:
+                self._remove_if_stale()
+                await asyncio.sleep(LOCK_POLL_SECONDS)  # without blocking the agent's event loop
+                continue
+            with os.fdopen(handle, "w") as lock:
+                lock.write(f"{os.getpid()}\n")
+            return
+
+    def _remove_if_stale(self) -> None:
+        try:
+            if time.time() - self.lock_path.stat().st_mtime > LOCK_STALE_SECONDS:
+                self.lock_path.unlink()
+        except FileNotFoundError:
+            pass
+
+    def _release(self) -> None:
+        try:
+            self.lock_path.unlink()
+        except FileNotFoundError:
+            pass
+
     @asynccontextmanager
     async def paid_call(self, run_id: str, worst_case_usd: float):
         """Use around one paid call:
@@ -128,10 +161,9 @@ class Budget:
         BudgetExceeded before any call), and keeps the lock until the call has been counted.
         """
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.lock_path, "a") as lock:
-            await asyncio.to_thread(fcntl.flock, lock, fcntl.LOCK_EX)
-            try:
-                self.check(run_id, worst_case_usd)
-                yield lambda **usage: self._add(run_id, **usage)
-            finally:
-                fcntl.flock(lock, fcntl.LOCK_UN)
+        await self._acquire()
+        try:
+            self.check(run_id, worst_case_usd)
+            yield lambda **usage: self._add(run_id, **usage)
+        finally:
+            self._release()

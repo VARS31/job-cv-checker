@@ -1,0 +1,19 @@
+# What Docker may read when it builds the image (the "build context").
+# Deny everything, then allow only what the Dockerfile copies. Secrets and personal files can't
+# reach the build, even by accident: .env, CVs (samples/cvs/), your job ads (samples/*.txt),
+# results/ (runs, the cloud spend file) and the private learning notes.
+*
+!requirements.txt
+!agents/
+!prompts/
+
+# Never, even inside the allowed folders:
+**/__pycache__
+**/*.pyc
+.env
+.env.*
+samples/
+results/
+docs/learning-notes.md
+.venv/
+.git/

@@ -7,15 +7,10 @@ Run with:  python -m agents.job_analyst
 
 import json
 
-import uvicorn
-from starlette.applications import Starlette
-
 from a2a.helpers import new_data_part, new_task_from_user_message, new_text_part
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
-from a2a.server.request_handlers import DefaultRequestHandler
-from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
-from a2a.server.tasks import InMemoryTaskStore, TaskUpdater
+from a2a.server.tasks import TaskUpdater
 from a2a.types import (
     AgentCapabilities,
     AgentCard,
@@ -24,6 +19,7 @@ from a2a.types import (
     UnsupportedOperationError,
 )
 
+from agents import tracing
 from agents.job_analyst.schema import REQUIREMENTS_SCHEMA, clean_requirements
 from agents.model_client import (
     PROJECT_ROOT,
@@ -34,8 +30,9 @@ from agents.model_client import (
     read_setting,
     startup_check,
 )
+from agents.server import serve
 
-HOST = "localhost"
+HOST = "localhost"  # the address in the agent card; where the server listens: agents/server.py
 PORT = 9001
 URL = f"http://{HOST}:{PORT}"
 
@@ -102,6 +99,11 @@ class JobAnalystExecutor(AgentExecutor):
         self.model = model
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
+        # SPAN: this message in the trace (a no-op when tracing is off).
+        with tracing.agent_task("Job Analyst", AGENT_CARD.version, context, "new task"):
+            await self._handle(context, event_queue)
+
+    async def _handle(self, context: RequestContext, event_queue: EventQueue) -> None:
         # MESSAGE: the incoming message from the client; we take the text of its parts.
         job_ad = context.get_user_input()
 
@@ -149,20 +151,8 @@ def main() -> None:
     # The model belongs to the agent: read once at startup, checked before the server starts.
     model = read_setting("JOB_ANALYST_MODEL")
     startup_check("Job Analyst", model)
-
-    # The request handler connects the HTTP layer to our executor and keeps tasks in memory.
-    handler = DefaultRequestHandler(
-        agent_executor=JobAnalystExecutor(model),
-        task_store=InMemoryTaskStore(),
-        agent_card=AGENT_CARD,
-    )
-    routes = [
-        # GET /.well-known/agent-card.json -> serves the AGENT CARD.
-        *create_agent_card_routes(AGENT_CARD),
-        # POST / -> receives JSON-RPC calls such as "SendMessage".
-        *create_jsonrpc_routes(handler, rpc_url="/"),
-    ]
-    uvicorn.run(Starlette(routes=routes), host=HOST, port=PORT)
+    # SERVER: the A2A routes, tracing and where to listen are the same for all agents (agents/server.py).
+    serve(AGENT_CARD, JobAnalystExecutor(model), PORT, "job-analyst")
 
 
 if __name__ == "__main__":

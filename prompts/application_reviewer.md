@@ -45,6 +45,7 @@ Questions a recruiter would ask in an interview about the gaps and the overclaim
 1. **Go through the numbered LETTER SENTENCES one by one** (S1, S2, ...). For EACH sentence, decide: overclaim? generic? both? neither? A sentence can be in both lists. Do not skip sentences.
 2. **Quote exactly.** Every "sentence" must be copied from the letter character for character. If you cannot copy it exactly, leave the item out.
 3. **Only report what is in the inputs.** Do not guess facts about the candidate or the company.
+   TODAY'S DATE is given at the top of the input: use it for "today" or "present" in the CV's dates (e.g. "09/2019 - today" runs until that date).
 4. **No score, no rewrite, no new wording.**
 5. Empty lists are fine if there are no overclaims or generic phrases.
 

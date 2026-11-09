@@ -38,10 +38,13 @@ def build_question(requirements: dict) -> str:
     return f"In one or two sentences: why do you want this role{at_company}?"
 
 
-def build_model_input(requirements: dict, report: dict, answer: str, cv_text: str) -> str:
-    """Everything the model may use. Missing and unclear items are NOT sent, so they can't be mentioned."""
+def build_model_input(requirements: dict, report: dict, answer: str, cv_text: str, today: str) -> str:
+    """Everything the model may use. Missing and unclear items are NOT sent, so they can't be mentioned.
+    today: today's date, so "09/2019 - today" in the CV can be counted correctly."""
     matched = sorted(report.get("matched", []), key=lambda i: i["kind"] != "required")
     lines = [
+        f"TODAY'S DATE: {today}",
+        "",
         "JOB",
         f"Title: {requirements.get('job_title', NOT_STATED)}",
         f"Company: {requirements.get('company', NOT_STATED)}",

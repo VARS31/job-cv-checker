@@ -112,3 +112,43 @@ def test_sonnet_has_one_rate_card_and_its_own_cache_rate():
     # No long-prompt surcharge: 200,000 tokens cost the same per token as 10,000.
     assert call_cost(sonnet, 200_000, 0) == pytest.approx(2.00 * 200_000 / 1_000_000)
     assert call_cost(sonnet, 0, 0, cache_read=1_000_000) == pytest.approx(2.00 * 0.05)
+
+
+def test_a_lock_left_by_a_dead_process_is_removed(tmp_path):
+    import os
+    import time as clock
+
+    from agents import budget as budget_module
+
+    budget = Budget(tmp_path / "spend.json", run_limit=0.5, total_limit=3.0)
+    budget.lock_path.write_text("12345\n")  # left behind by a process that died
+    old = clock.time() - budget_module.LOCK_STALE_SECONDS - 60
+    os.utime(budget.lock_path, (old, old))
+    spend(budget, "run-a", 0.01)  # doesn't wait forever
+    assert budget.spent("run-a")[0] == pytest.approx(0.01)
+    assert not budget.lock_path.exists()  # released after the call
+
+
+def test_a_held_lock_makes_the_next_call_wait(tmp_path):
+    budget = Budget(tmp_path / "spend.json", run_limit=0.5, total_limit=3.0)
+
+    async def scenario():
+        order = []
+
+        async def first():
+            async with budget.paid_call("run", 0.0) as count:
+                order.append("first starts")
+                await asyncio.sleep(0.3)
+                count(agent="a", model=MODEL, input_tokens=1, output_tokens=1, usd=0.001)
+                order.append("first ends")
+
+        async def second():
+            await asyncio.sleep(0.05)
+            async with budget.paid_call("run", 0.0) as count:
+                order.append("second starts")
+                count(agent="b", model=MODEL, input_tokens=1, output_tokens=1, usd=0.001)
+
+        await asyncio.gather(first(), second())
+        return order
+
+    assert asyncio.run(scenario()) == ["first starts", "first ends", "second starts"]

@@ -3,11 +3,17 @@
 import io
 import re
 import unicodedata
+from datetime import date
 
 from pypdf import PdfReader
 from pypdf.errors import PyPdfError
 
 MIN_CV_CHARACTERS = 200  # less text than this means the PDF is probably a scanned image
+
+
+def today_iso() -> str:
+    """Today's date, e.g. 2026-11-09. Agents that read CVs put it into the model's input: CVs say "09/2019 - today"."""
+    return date.today().isoformat()
 
 
 def extract_pdf_text(pdf_bytes: bytes) -> str:

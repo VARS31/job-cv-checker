@@ -7,17 +7,14 @@ Run with:  python -m agents.cv_matcher
 """
 
 import json
+import time
 
-import uvicorn
 from google.protobuf.json_format import MessageToDict
-from starlette.applications import Starlette
 
 from a2a.helpers import get_data_parts, new_data_part, new_task_from_user_message, new_text_part
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
-from a2a.server.request_handlers import DefaultRequestHandler
-from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
-from a2a.server.tasks import InMemoryTaskStore, TaskUpdater
+from a2a.server.tasks import TaskUpdater
 from a2a.types import (
     AgentCapabilities,
     AgentCard,
@@ -27,16 +24,18 @@ from a2a.types import (
     UnsupportedOperationError,
 )
 
+from agents import tracing
 from agents.cv_matcher.schema import (
     CHECK_SCHEMA,
     apply_model_checks,
+    build_check_input,
     build_checklist,
     build_questions,
-    checklist_as_text,
+    check_summary,
     merge_answers,
 )
 from agents.cv_matcher.scoring import build_report
-from agents.cv_text import extract_pdf_text
+from agents.cv_text import extract_pdf_text, today_iso
 from agents.model_client import (
     PROJECT_ROOT,
     USAGE_KEY,
@@ -46,8 +45,9 @@ from agents.model_client import (
     read_setting,
     startup_check,
 )
+from agents.server import serve
 
-HOST = "localhost"
+HOST = "localhost"  # the address in the agent card; where the server listens: agents/server.py
 PORT = 9002
 URL = f"http://{HOST}:{PORT}"
 
@@ -102,10 +102,13 @@ class CvMatcherExecutor(AgentExecutor):
 
         updater = TaskUpdater(event_queue, context.task_id, context.context_id)
 
+        # SPAN: this message in the trace (a no-op when tracing is off).
         if task is not None and task.status.state == TaskState.TASK_STATE_INPUT_REQUIRED:
-            await self._continue_with_answers(context, task, updater)
+            with tracing.agent_task("CV Matcher", AGENT_CARD.version, context, "answers received"):
+                await self._continue_with_answers(context, task, updater)
         else:
-            await self._start_analysis(context, updater)
+            with tracing.agent_task("CV Matcher", AGENT_CARD.version, context, "new task"):
+                await self._start_analysis(context, updater)
 
     async def _start_analysis(self, context: RequestContext, updater: TaskUpdater) -> None:
         parts = context.message.parts
@@ -149,7 +152,8 @@ class CvMatcherExecutor(AgentExecutor):
     async def _check_with_model(self, checklist: list[dict], cv_text: str, usage: Usage, run_id: str) -> list[dict]:
         """One model call for all requirements, then the quote check in plain Python."""
         instructions = PROMPT_FILE.read_text(encoding="utf-8")
-        user_message = f"Requirements:\n{checklist_as_text(checklist)}\n\nCV:\n{cv_text}"
+        # TODAY'S DATE goes first, so the model can count "09/2019 - today" correctly.
+        user_message = build_check_input(checklist, cv_text, today_iso())
 
         # MODEL CALL (through the shared model client), schema-enforced, temperature 0.
         answer = await ask_model(
@@ -166,8 +170,12 @@ class CvMatcherExecutor(AgentExecutor):
         except (json.JSONDecodeError, KeyError, TypeError) as e:
             raise ValueError(f"The model's answer is not the expected JSON: {answer[:200]!r}") from e
 
-        # QUOTE CHECK: a "found" only stays found if its quote really appears in the CV.
-        return apply_model_checks(checklist, checks, cv_text)
+        # QUOTE CHECK (a grounding check, with its own span): a "found" only stays found if its quote
+        # really appears in the CV; what a CV can't show becomes "unclear", so the candidate is asked.
+        with tracing.span("grounding: CV quote check", {"openinference.span.kind": "EVALUATOR"}) as span:
+            analysis = apply_model_checks(checklist, checks, cv_text)
+            tracing.set_attributes(span, check_summary(analysis))
+        return analysis
 
     async def _ask_user(self, updater, requirements, analysis, questions, usage: Usage) -> None:
         text = "Please answer yes or no:\n" + "\n".join(f"{q['id']}: {q['question']}" for q in questions)
@@ -181,9 +189,12 @@ class CvMatcherExecutor(AgentExecutor):
         # STATE SAVED: the half-finished analysis goes into the task's metadata.
         # The SDK merges status-update metadata into task.metadata in the task store.
         # The usage so far goes with it, so the final result can report the model call made before the pause.
+        # paused_at: when the task paused, so the trace can show how long the agent waited for the answers.
         state = {STATE_KEY: {
             "requirements": requirements, "analysis": analysis, "questions": questions, "usage": usage.as_metadata(),
+            "paused_at": time.time(),
         }}
+        tracing.set_attributes(tracing.current_span(), {"cvchecker.hitl.questions": len(questions)})
 
         # INPUT-REQUIRED: pause the task. execute() returns; the questions are the status message.
         await updater.update_status(
@@ -195,6 +206,10 @@ class CvMatcherExecutor(AgentExecutor):
         state = MessageToDict(task.metadata)[STATE_KEY]
         requirements, analysis, questions = state["requirements"], state["analysis"], state["questions"]
         usage = Usage.from_metadata(state["usage"]) if "usage" in state else Usage(self.model)
+        # HUMAN IN THE LOOP: how long the task was paused, waiting for these answers.
+        if "paused_at" in state:
+            waited = round(time.time() - float(state["paused_at"]), 3)
+            tracing.set_attributes(tracing.current_span(), {"cvchecker.hitl.waited_seconds": waited})
 
         answers = next(
             (d["answers"] for d in get_data_parts(context.message.parts)
@@ -238,19 +253,8 @@ def main() -> None:
     # The model belongs to the agent: read once at startup, checked before the server starts.
     model = read_setting("CV_MATCHER_MODEL")
     startup_check("CV Matcher", model)
-
-    handler = DefaultRequestHandler(
-        agent_executor=CvMatcherExecutor(model),
-        task_store=InMemoryTaskStore(),
-        agent_card=AGENT_CARD,
-    )
-    routes = [
-        # GET /.well-known/agent-card.json -> serves the AGENT CARD.
-        *create_agent_card_routes(AGENT_CARD),
-        # POST / -> receives JSON-RPC calls such as "SendMessage".
-        *create_jsonrpc_routes(handler, rpc_url="/"),
-    ]
-    uvicorn.run(Starlette(routes=routes), host=HOST, port=PORT)
+    # SERVER: the A2A routes, tracing and where to listen are the same for all agents (agents/server.py).
+    serve(AGENT_CARD, CvMatcherExecutor(model), PORT, "cv-matcher")
 
 
 if __name__ == "__main__":

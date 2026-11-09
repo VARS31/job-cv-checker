@@ -9,19 +9,15 @@ Run with:  python -m agents.application_reviewer
 
 import json
 
-import uvicorn
-from starlette.applications import Starlette
-
 from google.protobuf.json_format import MessageToDict
 
 from a2a.helpers import get_data_parts, new_data_part, new_task_from_user_message, new_text_part
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
-from a2a.server.request_handlers import DefaultRequestHandler
-from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
-from a2a.server.tasks import InMemoryTaskStore, TaskUpdater
+from a2a.server.tasks import TaskUpdater
 from a2a.types import AgentCapabilities, AgentCard, AgentInterface, AgentSkill, UnsupportedOperationError
 
+from agents import tracing
 from agents.application_reviewer.schema import (
     REVIEW_SCHEMA,
     add_known_cliches,
@@ -29,7 +25,7 @@ from agents.application_reviewer.schema import (
     build_review_md,
     ground_review,
 )
-from agents.cv_text import extract_pdf_text
+from agents.cv_text import extract_pdf_text, today_iso
 from agents.model_client import (
     PROJECT_ROOT,
     USAGE_KEY,
@@ -39,8 +35,9 @@ from agents.model_client import (
     read_setting,
     startup_check,
 )
+from agents.server import serve
 
-HOST = "localhost"
+HOST = "localhost"  # the address in the agent card; where the server listens: agents/server.py
 PORT = 9004
 URL = f"http://{HOST}:{PORT}"
 
@@ -108,6 +105,11 @@ class ApplicationReviewerExecutor(AgentExecutor):
         self.model = model
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
+        # SPAN: this message in the trace (a no-op when tracing is off).
+        with tracing.agent_task("Application Reviewer", AGENT_CARD.version, context, "new task"):
+            await self._handle(context, event_queue)
+
+    async def _handle(self, context: RequestContext, event_queue: EventQueue) -> None:
         # TASK: create it on the first (and only) message.
         if context.current_task is None:
             await event_queue.enqueue_event(new_task_from_user_message(context.message))
@@ -158,7 +160,7 @@ class ApplicationReviewerExecutor(AgentExecutor):
         instructions = PROMPT_FILE.read_text(encoding="utf-8")
         # MODEL CALL (through the shared model client), schema-enforced, temperature 0 on Ollama.
         answer = await ask_model(
-            build_model_input(requirements, report, letter, cv_text, job_ad),
+            build_model_input(requirements, report, letter, cv_text, job_ad, today_iso()),
             self.model,
             system=instructions,
             json_schema=REVIEW_SCHEMA,
@@ -171,10 +173,21 @@ class ApplicationReviewerExecutor(AgentExecutor):
             review = json.loads(answer)
         except json.JSONDecodeError as e:
             raise ValueError(f"The model's answer is not valid JSON: {answer[:200]!r}") from e
-        # GROUNDING CHECK: drop quoted sentences that are not really in the letter.
-        review = ground_review(review, letter)
+        # GROUNDING CHECK (with its own span): drop quoted sentences that are not really in the letter.
+        with tracing.span("grounding: letter quote check", {"openinference.span.kind": "EVALUATOR"}) as span:
+            review = ground_review(review, letter)
+            tracing.set_attributes(span, {
+                "cvchecker.review.overclaims_kept": len(review["overclaims"]),
+                "cvchecker.review.generic_kept": len(review["generic_phrases"]),
+                "cvchecker.review.overclaims_dropped": review["dropped_ungrounded"]["overclaims"],
+                "cvchecker.review.generic_dropped": review["dropped_ungrounded"]["generic_phrases"],
+            })
         # CLICHÉ CHECK: plain-Python safety net for known clichés the model missed.
-        return add_known_cliches(review, letter)
+        with tracing.span("cliché check", {"openinference.span.kind": "EVALUATOR"}) as span:
+            review = add_known_cliches(review, letter)
+            tracing.set_attributes(span, {"cvchecker.review.cliches_added": review["added_by_cliche_check"]})
+        tracing.set_attributes(tracing.current_span(), {"cvchecker.review.verdict": review["verdict"]["decision"]})
+        return review
 
     async def _fail(self, updater: TaskUpdater, error: str, usage: Usage | None = None) -> None:
         # FAILED STATUS: final state, with the error as a text message (and the usage so far, if any).
@@ -191,18 +204,8 @@ def main() -> None:
     # The model belongs to the agent: read once at startup, checked before the server starts.
     model = read_setting("REVIEWER_MODEL")
     startup_check("Application Reviewer", model)
-    handler = DefaultRequestHandler(
-        agent_executor=ApplicationReviewerExecutor(model),
-        task_store=InMemoryTaskStore(),
-        agent_card=AGENT_CARD,
-    )
-    routes = [
-        # GET /.well-known/agent-card.json -> serves the AGENT CARD.
-        *create_agent_card_routes(AGENT_CARD),
-        # POST / -> receives JSON-RPC calls such as "SendMessage".
-        *create_jsonrpc_routes(handler, rpc_url="/"),
-    ]
-    uvicorn.run(Starlette(routes=routes), host=HOST, port=PORT)
+    # SERVER: the A2A routes, tracing and where to listen are the same for all agents (agents/server.py).
+    serve(AGENT_CARD, ApplicationReviewerExecutor(model), PORT, "application-reviewer")
 
 
 if __name__ == "__main__":

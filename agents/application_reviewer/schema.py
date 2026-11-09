@@ -92,7 +92,7 @@ def letter_sentences(letter: str) -> list[str]:
     return sentences
 
 
-def build_model_input(requirements: dict, report: dict, letter: str, cv_text: str, job_ad: str) -> str:
+def build_model_input(requirements: dict, report: dict, letter: str, cv_text: str, job_ad: str, today: str) -> str:
     def items(key: str, with_quote: bool = False) -> list[str]:
         return [
             f"- [{i['kind']}] {i['item']}" + (f": CV says \"{i['quote']}\"" if with_quote else "")
@@ -102,6 +102,9 @@ def build_model_input(requirements: dict, report: dict, letter: str, cv_text: st
     paragraphs = body_paragraphs(letter)
     paragraph_3 = paragraphs[2] if len(paragraphs) >= 3 else "(the letter has no third body paragraph)"
     lines = [
+        # Today's date, so "09/2019 - today" in the CV is counted correctly.
+        f"TODAY'S DATE: {today}",
+        "",
         "JOB",
         f"Title: {requirements.get('job_title', NOT_STATED)}",
         f"Company: {requirements.get('company', NOT_STATED)}",

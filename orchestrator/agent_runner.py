@@ -12,6 +12,7 @@ from a2a.helpers import get_data_parts, get_message_text, new_data_part, new_tex
 from a2a.types import AgentCard, Message, Role, SendMessageRequest, TaskState
 from a2a.utils.errors import A2AError  # base of all client errors and server error replies
 
+from agents import tracing
 from agents.model_client import USAGE_KEY, read_setting
 from orchestrator.pipeline import Step
 
@@ -148,21 +149,33 @@ async def run_step(agent: ConnectedAgent, parts: list, context_id: str, answers)
                  if isinstance(d, dict) and isinstance(d.get("questions"), list)),
                 None,
             )
-            if questions:
-                print(f" input-required ({len(questions)} question{'s' if len(questions) != 1 else ''})")
-                yes_no = {}
-                for q in questions:
-                    yes_no[q["id"]] = answers.yes_no(q["question"])
-                    result.answers.append({
-                        "question": q["question"], "answer": "yes" if yes_no[q["id"]] else "no", "from": answers.source,
-                    })
-                answer_parts = [new_data_part({"answers": yes_no})]
-            else:
-                print(" input-required (free text)")
-                question = get_message_text(task.status.message)
-                reply_text = answers.free_text(question)
-                result.answers.append({"question": question, "answer": reply_text, "from": answers.source})
-                answer_parts = [new_text_part(reply_text)]
+            # HUMAN IN THE LOOP: a span for the time spent waiting for the answers (you, or a file).
+            with tracing.span(f"waiting for the user: {step.name}", {
+                "openinference.span.kind": "CHAIN",
+                "cvchecker.hitl.kind": "yes/no" if questions else "free text",
+                "cvchecker.hitl.questions": len(questions) if questions else 1,
+                "cvchecker.hitl.answers_from": answers.source,
+            }) as wait_span:
+                if questions:
+                    print(f" input-required ({len(questions)} question{'s' if len(questions) != 1 else ''})")
+                    yes_no = {}
+                    for q in questions:
+                        yes_no[q["id"]] = answers.yes_no(q["question"])
+                        result.answers.append({
+                            "question": q["question"], "answer": "yes" if yes_no[q["id"]] else "no", "from": answers.source,
+                        })
+                    answer_parts = [new_data_part({"answers": yes_no})]
+                else:
+                    print(" input-required (free text)")
+                    question = get_message_text(task.status.message)
+                    reply_text = answers.free_text(question)
+                    result.answers.append({"question": question, "answer": reply_text, "from": answers.source})
+                    answer_parts = [new_text_part(reply_text)]
+                asked = result.answers[-(len(questions) if questions else 1):]  # this round's questions and answers
+                tracing.set_content(wait_span, {
+                    "cvchecker.hitl.questions_text": [a["question"] for a in asked],
+                    "cvchecker.hitl.answers_text": [a["answer"] for a in asked],
+                })
 
             # Same task id and context id -> the agent continues the paused task.
             reply = Message(

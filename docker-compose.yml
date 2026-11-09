@@ -1,0 +1,87 @@
+# The four agents in containers, plus the trace viewers (only with the "tracing" profile).
+#
+# Start with:  python scripts/docker_up.py [--preset haiku] [--tracing] [--content]
+# (it checks the ports first and sets the models). Stop with:  python scripts/docker_up.py --down
+#
+# - Everything is published on 127.0.0.1 only: nothing is reachable from other machines.
+# - Ollama stays on the Mac; the containers reach it via host.docker.internal.
+# - The orchestrator is not here: it runs in your terminal, because it asks you questions.
+# - The API key reaches the containers only as an environment variable when they start
+#   (from your shell or .env, read by compose). docker_up.py passes an empty key with the local preset.
+
+x-agent: &agent
+  build: .
+  image: job-cv-checker-agents:latest
+  restart: "no"                   # a failed startup check (e.g. a rejected key) stops the agent; no retry loop
+  volumes:
+    - ./results:/app/results      # the cloud spend file (shared by all four agents) and debug output
+
+x-agent-env: &agent-env
+  OLLAMA_URL: http://host.docker.internal:11434
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  BUDGET_PER_RUN_USD: ${BUDGET_PER_RUN_USD:-0.50}
+  BUDGET_TOTAL_USD: ${BUDGET_TOTAL_USD:-3.00}
+  TRACING: ${TRACING:-off}
+  TRACE_CONTENT: ${TRACE_CONTENT:-off}
+  JAEGER_OTLP_URL: http://jaeger:4318/v1/traces
+  PHOENIX_OTLP_URL: http://phoenix:6006/v1/traces
+
+services:
+  job-analyst:
+    <<: *agent
+    container_name: job-cv-checker-job-analyst
+    command: ["python", "-m", "agents.job_analyst"]
+    environment:
+      <<: *agent-env
+      JOB_ANALYST_MODEL: ${JOB_ANALYST_MODEL:-ministral-3:8b}
+    ports:
+      - "127.0.0.1:9001:9001"
+
+  cv-matcher:
+    <<: *agent
+    container_name: job-cv-checker-cv-matcher
+    command: ["python", "-m", "agents.cv_matcher"]
+    environment:
+      <<: *agent-env
+      CV_MATCHER_MODEL: ${CV_MATCHER_MODEL:-ministral-3:8b}
+    ports:
+      - "127.0.0.1:9002:9002"
+
+  cover-letter-writer:
+    <<: *agent
+    container_name: job-cv-checker-cover-letter-writer
+    command: ["python", "-m", "agents.cover_letter_writer"]
+    environment:
+      <<: *agent-env
+      COVER_LETTER_MODEL: ${COVER_LETTER_MODEL:-ministral-3:8b}
+    ports:
+      - "127.0.0.1:9003:9003"
+
+  application-reviewer:
+    <<: *agent
+    container_name: job-cv-checker-application-reviewer
+    command: ["python", "-m", "agents.application_reviewer"]
+    environment:
+      <<: *agent-env
+      REVIEWER_MODEL: ${REVIEWER_MODEL:-granite4.1:8b}
+    ports:
+      - "127.0.0.1:9004:9004"
+
+  # Trace viewers: the same images and ports as in the labour-law project, so only one set can run at a time.
+  jaeger:
+    image: jaegertracing/jaeger:2.22.0          # Apache-2.0. Keeps traces in memory, until the container stops
+    container_name: job-cv-checker-jaeger
+    profiles: [tracing]
+    ports:
+      - "127.0.0.1:16686:16686"                 # the web page
+      - "127.0.0.1:4318:4318"                   # where traces arrive, over OTLP (HTTP)
+
+  phoenix:
+    image: arizephoenix/phoenix:version-21.0.0-nonroot   # Elastic License 2.0: free to use locally
+    container_name: job-cv-checker-phoenix
+    profiles: [tracing]
+    environment:
+      PHOENIX_TELEMETRY_ENABLED: "false"        # it would otherwise report its own usage to Arize
+      PHOENIX_ENABLE_AUTH: "false"              # no login: only this machine can reach the port
+    ports:
+      - "127.0.0.1:6006:6006"                   # the web page, and where traces arrive, over OTLP (HTTP)

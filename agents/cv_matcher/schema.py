@@ -26,6 +26,13 @@ def cannot_show_in_cv(text: str) -> bool:
     return bool(CANNOT_SHOW.search(text))
 
 
+# Notes the quote check writes on an item (the trace counts them).
+NOTE_NO_ANSWER = "model gave no answer for this item"
+NOTE_NO_QUOTE = "model said found but gave no quote"
+NOTE_QUOTE_NOT_IN_CV = "quote not found in CV"
+NOTE_CANNOT_SHOW = "a CV can't show this, so you are asked"
+
+
 # JSON OUTPUT ENFORCED: Ollama forces the model's answer into this shape.
 CHECK_SCHEMA = {
     "type": "object",
@@ -88,6 +95,11 @@ def checklist_as_text(checklist: list[dict]) -> str:
     return "\n".join(f"{i['id']} [{i['kind']}] {i['text']}" for i in checklist)
 
 
+def build_check_input(checklist: list[dict], cv_text: str, today: str) -> str:
+    """The model's input: today's date first (so "09/2019 - today" can be counted), then the checklist and the CV."""
+    return f"TODAY'S DATE: {today}\n\nRequirements:\n{checklist_as_text(checklist)}\n\nCV:\n{cv_text}"
+
+
 def apply_model_checks(checklist: list[dict], checks: list[dict], cv_text: str) -> list[dict]:
     """Combine the checklist with the model's answer. A "found" needs a real quote."""
     by_id = {c["id"]: c for c in checks}
@@ -96,20 +108,35 @@ def apply_model_checks(checklist: list[dict], checks: list[dict], cv_text: str) 
         check = by_id.get(item["id"])
         status, quote, note = UNCLEAR, "", ""
         if check is None:
-            note = "model gave no answer for this item"
+            note = NOTE_NO_ANSWER
         else:
             status, quote = check["status"], check["quote"].strip()
             if status == FOUND and not quote:
-                status, note = UNCLEAR, "model said found but gave no quote"
+                status, note = UNCLEAR, NOTE_NO_QUOTE
             elif status == FOUND and not quote_in_text(quote, cv_text):
-                status, note = UNCLEAR, f"quote not found in CV: {quote!r}"
+                status, note = UNCLEAR, f"{NOTE_QUOTE_NOT_IN_CV}: {quote!r}"
             if status != FOUND:
                 quote = ""
         if status == MISSING and cannot_show_in_cv(item["text"]):
             # CAN'T BE SHOWN IN A CV: ask the candidate instead of counting it as missing.
-            status, note = UNCLEAR, "a CV can't show this, so you are asked"
+            status, note = UNCLEAR, NOTE_CANNOT_SHOW
         analysis.append({**item, "status": status, "quote": quote, "note": note})
     return analysis
+
+
+def check_summary(analysis: list[dict]) -> dict:
+    """What the quote check kept and changed, as counts (for the trace)."""
+    notes = [i["note"] for i in analysis]
+    return {
+        "cvchecker.check.items": len(analysis),
+        "cvchecker.check.found": sum(i["status"] == FOUND for i in analysis),
+        "cvchecker.check.unclear": sum(i["status"] == UNCLEAR for i in analysis),
+        "cvchecker.check.missing": sum(i["status"] == MISSING for i in analysis),
+        "cvchecker.check.quote_not_in_cv": sum(n.startswith(NOTE_QUOTE_NOT_IN_CV) for n in notes),
+        "cvchecker.check.found_without_quote": notes.count(NOTE_NO_QUOTE),
+        "cvchecker.check.no_answer": notes.count(NOTE_NO_ANSWER),
+        "cvchecker.check.cannot_show_asked": notes.count(NOTE_CANNOT_SHOW),
+    }
 
 
 # Question priority: things a CV can't show first (only the candidate knows them), then

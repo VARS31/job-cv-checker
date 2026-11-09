@@ -17,7 +17,7 @@ def _now() -> str:
 
 
 class RunStore:
-    def __init__(self, context_id: str, inputs: dict) -> None:
+    def __init__(self, context_id: str, inputs: dict, trace_id: str | None = None) -> None:
         self.dir = RESULTS_DIR / "runs" / datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         self.dir.mkdir(parents=True, exist_ok=True)
         self.log = {
@@ -26,6 +26,7 @@ class RunStore:
             "status": "running",
             "message": None,
             "context_id": context_id,
+            "trace_id": trace_id,  # the run's trace in Jaeger and Phoenix (None when tracing is off)
             "inputs": inputs,
             "steps": [],
         }

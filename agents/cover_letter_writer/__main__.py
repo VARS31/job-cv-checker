@@ -7,17 +7,14 @@ Run with:  python -m agents.cover_letter_writer
 """
 
 import json
+import time
 
-import uvicorn
 from google.protobuf.json_format import MessageToDict
-from starlette.applications import Starlette
 
 from a2a.helpers import get_data_parts, new_data_part, new_task_from_user_message, new_text_part
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
-from a2a.server.request_handlers import DefaultRequestHandler
-from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
-from a2a.server.tasks import InMemoryTaskStore, TaskUpdater
+from a2a.server.tasks import TaskUpdater
 from a2a.types import (
     AgentCapabilities,
     AgentCard,
@@ -27,6 +24,7 @@ from a2a.types import (
     UnsupportedOperationError,
 )
 
+from agents import tracing
 from agents.cover_letter_writer.schema import (
     LETTER_SCHEMA,
     body_paragraphs,
@@ -37,7 +35,7 @@ from agents.cover_letter_writer.schema import (
     fix_dashes,
     style_warnings,
 )
-from agents.cv_text import extract_pdf_text
+from agents.cv_text import extract_pdf_text, today_iso
 from agents.model_client import (
     PROJECT_ROOT,
     USAGE_KEY,
@@ -47,8 +45,9 @@ from agents.model_client import (
     read_setting,
     startup_check,
 )
+from agents.server import serve
 
-HOST = "localhost"
+HOST = "localhost"  # the address in the agent card; where the server listens: agents/server.py
 PORT = 9003
 URL = f"http://{HOST}:{PORT}"
 
@@ -112,10 +111,13 @@ class CoverLetterExecutor(AgentExecutor):
             await event_queue.enqueue_event(new_task_from_user_message(context.message))
         updater = TaskUpdater(event_queue, context.task_id, context.context_id)
 
+        # SPAN: this message in the trace (a no-op when tracing is off).
         if task is not None and task.status.state == TaskState.TASK_STATE_INPUT_REQUIRED:
-            await self._continue_with_answer(context, task, updater)
+            with tracing.agent_task("Cover Letter Writer", AGENT_CARD.version, context, "answer received"):
+                await self._continue_with_answer(context, task, updater)
         else:
-            await self._start(context, updater)
+            with tracing.agent_task("Cover Letter Writer", AGENT_CARD.version, context, "new task"):
+                await self._start(context, updater)
 
     async def _start(self, context: RequestContext, updater: TaskUpdater) -> None:
         parts = context.message.parts
@@ -141,6 +143,8 @@ class CoverLetterExecutor(AgentExecutor):
 
     async def _ask_user(self, updater: TaskUpdater, state: dict) -> None:
         question = build_question(state["requirements"])
+        # paused_at: when the task paused, so the trace can show how long the agent waited for the answer.
+        state = {**state, "paused_at": time.time()}
         # STATE SAVED: inputs and CV text go into task.metadata, so the PDF isn't read again.
         # INPUT-REQUIRED: pause the task; the question is the status message (free text).
         await updater.update_status(
@@ -152,6 +156,11 @@ class CoverLetterExecutor(AgentExecutor):
     async def _continue_with_answer(self, context: RequestContext, task, updater: TaskUpdater) -> None:
         # STATE SAVED (read back): what we stored when we paused.
         state = MessageToDict(task.metadata)[STATE_KEY]
+
+        # HUMAN IN THE LOOP: how long the task was paused, waiting for this answer.
+        if "paused_at" in state:
+            waited = round(time.time() - float(state["paused_at"]), 3)
+            tracing.set_attributes(tracing.current_span(), {"cvchecker.hitl.waited_seconds": waited})
 
         # ANSWER MERGED: the free-text answer is the text part(s) of the new message.
         answer = context.get_user_input().strip()
@@ -202,11 +211,12 @@ class CoverLetterExecutor(AgentExecutor):
 
     async def _write_letter(self, state: dict, answer: str, usage: Usage, run_id: str) -> dict:
         requirements, report, cv_text = state["requirements"], state["report"], state["cv_text"]
-        model_input = build_model_input(requirements, report, answer, cv_text)
+        # TODAY'S DATE goes into the input, so "09/2019 - today" in the CV is counted correctly.
+        model_input = build_model_input(requirements, report, answer, cv_text, today_iso())
 
         letter, claims = await self._ask_model(model_input, usage, run_id)
         # CLAIMS CHECKED: every quote must appear in the CV, or in the answer / confirmed items.
-        proven, unproven = check_claims(claims, cv_text, answer, report)
+        proven, unproven = self._checked_claims(1, claims, cv_text, answer, report)
 
         rewrite_used = False
         if unproven:
@@ -214,7 +224,7 @@ class CoverLetterExecutor(AgentExecutor):
             rewrite_used = True
             first_unproven = unproven
             letter, claims = await self._ask_model(build_rewrite_input(model_input, letter, unproven), usage, run_id)
-            proven, unproven = check_claims(claims, cv_text, answer, report)
+            proven, unproven = self._checked_claims(2, claims, cv_text, answer, report)
         else:
             first_unproven = []
 
@@ -231,6 +241,21 @@ class CoverLetterExecutor(AgentExecutor):
         }
         return {"letter": letter, "details": details}
 
+    @staticmethod
+    def _checked_claims(attempt: int, claims, cv_text: str, answer: str, report: dict):
+        """The claims check (a grounding check), with its own span: counts always, the claims only as content."""
+        with tracing.span("grounding: claims check", {
+            "openinference.span.kind": "EVALUATOR", "cvchecker.claims.attempt": attempt,
+        }) as span:
+            proven, unproven = check_claims(claims, cv_text, answer, report)
+            tracing.set_attributes(span, {
+                "cvchecker.claims.total": len(claims),
+                "cvchecker.claims.proven": len(proven),
+                "cvchecker.claims.unproven": len(unproven),
+            })
+            tracing.set_content(span, {"cvchecker.claims.unproven_text": [c["claim"] for c in unproven]})
+        return proven, unproven
+
     async def _fail(self, updater: TaskUpdater, error: str, usage: Usage | None = None) -> None:
         # FAILED STATUS: final state, with the error as a text message (and the usage so far, if any).
         metadata = {USAGE_KEY: usage.as_metadata()} if usage else None
@@ -246,18 +271,8 @@ def main() -> None:
     # The model belongs to the agent: read once at startup, checked before the server starts.
     model = read_setting("COVER_LETTER_MODEL")
     startup_check("Cover Letter Writer", model)
-    handler = DefaultRequestHandler(
-        agent_executor=CoverLetterExecutor(model),
-        task_store=InMemoryTaskStore(),
-        agent_card=AGENT_CARD,
-    )
-    routes = [
-        # GET /.well-known/agent-card.json -> serves the AGENT CARD.
-        *create_agent_card_routes(AGENT_CARD),
-        # POST / -> receives JSON-RPC calls such as "SendMessage".
-        *create_jsonrpc_routes(handler, rpc_url="/"),
-    ]
-    uvicorn.run(Starlette(routes=routes), host=HOST, port=PORT)
+    # SERVER: the A2A routes, tracing and where to listen are the same for all agents (agents/server.py).
+    serve(AGENT_CARD, CoverLetterExecutor(model), PORT, "cover-letter-writer")
 
 
 if __name__ == "__main__":

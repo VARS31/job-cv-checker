@@ -24,7 +24,7 @@ Kind regards,
 # Writing rules
 
 1. **Only proven content.** Use only the matched items, the confirmed items, the CV text and the candidate's answer. Never mention requirements the candidate does not meet.
-2. **Never invent** experience, numbers, percentages, titles, team sizes, company names, dates or results. If the CV gives no number, write without a number.
+2. **Never invent** experience, numbers, percentages, titles, team sizes, company names, dates or results. If the CV gives no number, write without a number. TODAY'S DATE is given at the top of the input: use it for "today" or "present" in the CV's dates.
 3. **Honest framing.** Use the job titles exactly as in the CV. Do not upgrade them (e.g. "Developer" must not become "Lead Developer").
 4. **Natural language.** No em-dashes (—) and no dashes used as pauses; use commas or full stops. Avoid AI-sounding words and phrases: "thrilled", "excited", "passionate", "leverage", "synergy", "in today's fast-paced world", "cutting-edge", "dynamic", "seamless", "spearhead", "delve", "I am writing to express my interest".
 5. **Flowing paragraphs, no bullet points, no headings.**

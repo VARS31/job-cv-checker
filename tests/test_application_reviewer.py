@@ -72,9 +72,10 @@ JOB_AD = "Backend Engineer at Example GmbH. About us: we build software for frei
 
 def test_reviewer_input_contains_the_original_job_ad():
     report = {"summary": "", "matched": [], "confirmed_by_user": [], "missing": [], "unclear": []}
-    text = build_model_input({"job_title": "Backend Engineer"}, report, LETTER, "cv text", JOB_AD)
+    text = build_model_input({"job_title": "Backend Engineer"}, report, LETTER, "cv text", JOB_AD, "2026-11-09")
     assert "JOB AD (the original text, including the company description)" in text
     assert "software for freight companies" in text
+    assert text.startswith("TODAY'S DATE: 2026-11-09")
 
 
 def test_labelled_text_parts_tell_letter_and_job_ad_apart():

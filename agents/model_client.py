@@ -27,6 +27,7 @@ from pathlib import Path
 
 import httpx
 
+from agents import tracing
 from agents.budget import Budget, BudgetExceeded, call_cost, has_price, worst_case_cost
 
 DEFAULT_CONTEXT_SIZE = 8192  # tokens (Ollama only)
@@ -208,10 +209,13 @@ async def ask_model(
     usage: tokens, cost and time are added to it (also when the call fails after being billed).
     run_id: the A2A context id; the budget guard's per-run limit applies to it (Claude only).
     num_ctx and temperature are Ollama settings; Claude ignores them (see the module docstring).
+    With tracing on, the call gets its own span (model, tokens, cost; the texts only if content may be recorded).
     """
     if is_claude_model(model):
-        return await _ask_claude(prompt, model, system, json_schema, timeout, usage, run_id)
-    return await _ask_ollama(prompt, model, system, json_schema, num_ctx, temperature, timeout, usage)
+        with tracing.model_call(model, "anthropic", system, prompt, max_tokens=CLAUDE_MAX_TOKENS) as span:
+            return await _ask_claude(prompt, model, system, json_schema, timeout, usage, run_id, span)
+    with tracing.model_call(model, "ollama", system, prompt, temperature=temperature) as span:
+        return await _ask_ollama(prompt, model, system, json_schema, num_ctx, temperature, timeout, usage, span)
 
 
 # --- Ollama (local) ---------------------------------------------------------------------------------
@@ -231,7 +235,7 @@ def _estimate_tokens(messages: list[dict]) -> int:
     return sum(len(message["content"]) for message in messages) // 4
 
 
-async def _ask_ollama(prompt, model, system, json_schema, num_ctx, temperature, timeout, usage) -> str:
+async def _ask_ollama(prompt, model, system, json_schema, num_ctx, temperature, timeout, usage, span) -> str:
     messages = []
     if system is not None:
         # System message: the standing instructions. User message: the actual input.
@@ -280,8 +284,11 @@ async def _ask_ollama(prompt, model, system, json_schema, num_ctx, temperature, 
     prompt_tokens, answer_tokens = body.get("prompt_eval_count") or 0, body.get("eval_count") or 0
     if usage is not None:
         usage.add(prompt_tokens, answer_tokens, 0.0, time.perf_counter() - started)  # local: costs nothing
+    tracing.model_result(span, input_tokens=prompt_tokens, output_tokens=answer_tokens, cost_usd=0.0,
+                         finish_reason=body.get("done_reason"), response_model=body.get("model"))
     # Ollama reports the real token counts, so the estimate above can be checked.
     print(f"[model_client] {model}: real prompt tokens {prompt_tokens}, answer tokens {answer_tokens}")
+    tracing.model_answer(span, body["message"]["content"])
     return body["message"]["content"]
 
 
@@ -353,7 +360,7 @@ def _claude(timeout: float):
     return _claude_client.with_options(timeout=timeout)
 
 
-async def _ask_claude(prompt, model, system, json_schema, timeout, usage, run_id) -> str:
+async def _ask_claude(prompt, model, system, json_schema, timeout, usage, run_id, span) -> str:
     import anthropic
 
     # No temperature, no thinking setting: the model's defaults (see the module docstring).
@@ -367,6 +374,7 @@ async def _ask_claude(prompt, model, system, json_schema, timeout, usage, run_id
     prompt_chars = len(prompt) + len(system or "")
     worst_case = worst_case_cost(model, prompt_chars, CLAUDE_MAX_TOKENS)
     print(f"[model_client] {model}: request ~{prompt_chars // 4} tokens (cloud, at most ${worst_case:.4f})")
+    tracing.set_attributes(span, {"cvchecker.budget.worst_case_usd": round(worst_case, 6)})
 
     try:
         # BUDGET GUARD: checked before the call, counted right after it, under one lock.
@@ -392,6 +400,8 @@ async def _ask_claude(prompt, model, system, json_schema, timeout, usage, run_id
     if usage is not None:
         usage.add(input_tokens, u.output_tokens, cost, seconds)
     thinking = getattr(getattr(u, "output_tokens_details", None), "thinking_tokens", None)
+    tracing.model_result(span, input_tokens=input_tokens, output_tokens=u.output_tokens, cost_usd=cost,
+                         finish_reason=response.stop_reason, response_model=response.model, thinking_tokens=thinking)
     print(
         f"[model_client] {model}: real prompt tokens {input_tokens}, answer tokens {u.output_tokens}"
         f"{f' (thinking {thinking})' if thinking is not None else ''}, ${cost:.5f}, {seconds:.1f} s"
@@ -413,4 +423,5 @@ async def _ask_claude(prompt, model, system, json_schema, timeout, usage, run_id
         if usage is not None:
             usage.notes += notes
         text = json.dumps(data, ensure_ascii=False)
+    tracing.model_answer(span, text)
     return text

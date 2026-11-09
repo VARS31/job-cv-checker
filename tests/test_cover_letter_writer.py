@@ -65,6 +65,7 @@ def test_model_input_leaves_out_missing_and_unclear_items():
         "missing": [{"item": "Kubernetes", "kind": "required"}],
         "unclear": [{"item": "Go", "kind": "required", "note": ""}],
     }
-    text = build_model_input({"job_title": "Dev", "company": "X"}, report, "answer", "cv text")
+    text = build_model_input({"job_title": "Dev", "company": "X"}, report, "answer", "cv text", "2026-11-09")
     assert "Python" in text
     assert "Kubernetes" not in text and "Go" not in text
+    assert text.startswith("TODAY'S DATE: 2026-11-09")
