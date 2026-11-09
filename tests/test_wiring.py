@@ -65,8 +65,13 @@ def test_presets_set_every_agent_and_local_is_the_default():
     presets = start_script["PRESETS"]
     for preset in presets.values():
         assert sorted(preset) == sorted(settings)
+    assert sorted(presets) == ["haiku", "haiku-sonnet", "local"]
     assert not any(is_claude_model(m) for m in presets["local"].values())
-    assert all(is_claude_model(m) and has_price(m) for m in presets["haiku"].values())
+    for name in ("haiku", "haiku-sonnet"):
+        assert all(is_claude_model(m) and has_price(m) for m in presets[name].values())
+    # haiku-sonnet: Haiku for the first three agents, Sonnet for the Reviewer only.
+    assert presets["haiku-sonnet"]["REVIEWER_MODEL"] == "claude-sonnet-5-5"
+    assert {presets["haiku-sonnet"][s] for s in settings if s != "REVIEWER_MODEL"} == {"claude-haiku-5-5"}
     assert 'default="local"' in (ROOT / "scripts" / "start_agents.py").read_text()
 
 

@@ -1,7 +1,8 @@
 """Start all agents in one terminal; Ctrl+C stops them all.
 
-Run with:  python scripts/start_agents.py                  local models (the default)
-           python scripts/start_agents.py --preset haiku   Claude Haiku for all four (cloud, paid)
+Run with:  python scripts/start_agents.py                         local models (the default)
+           python scripts/start_agents.py --preset haiku          Claude Haiku for all four (cloud, paid)
+           python scripts/start_agents.py --preset haiku-sonnet   Haiku for three, Claude Sonnet as the Reviewer
 
 A preset sets each agent's model setting (e.g. JOB_ANALYST_MODEL) for the agents started here; it
 overrides the *_MODEL lines in .env. An agent started on its own (python -m agents.<name>) reads .env.
@@ -41,6 +42,13 @@ PRESETS = {
         "COVER_LETTER_MODEL": "claude-haiku-5-5",
         "REVIEWER_MODEL": "claude-haiku-5-5",
     },
+    # The Reviewer from another model family than the agents it reviews (docs/decisions.md, decision 8).
+    "haiku-sonnet": {
+        "JOB_ANALYST_MODEL": "claude-haiku-5-5",
+        "CV_MATCHER_MODEL": "claude-haiku-5-5",
+        "COVER_LETTER_MODEL": "claude-haiku-5-5",
+        "REVIEWER_MODEL": "claude-sonnet-5-5",
+    },
 }
 READY_TIMEOUT_SECONDS = 30
 
@@ -68,7 +76,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Start all four agents; Ctrl+C stops them.")
     parser.add_argument(
         "--preset", choices=sorted(PRESETS), default="local",
-        help="which models the agents use: local (Ollama, the default) or haiku (Claude, cloud, paid)",
+        help="which models the agents use: local (Ollama, the default), haiku or haiku-sonnet (Claude, cloud, paid)",
     )
     preset = parser.parse_args().preset
     models = PRESETS[preset]

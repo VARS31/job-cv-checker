@@ -1,6 +1,6 @@
 # The four agents in containers, plus the trace viewers (only with the "tracing" profile).
 #
-# Start with:  python scripts/docker_up.py [--preset haiku] [--tracing] [--content]
+# Start with:  python scripts/docker_up.py [--preset haiku|haiku-sonnet] [--tracing] [--content]
 # (it checks the ports first and sets the models). Stop with:  python scripts/docker_up.py --down
 #
 # - Everything is published on 127.0.0.1 only: nothing is reachable from other machines.

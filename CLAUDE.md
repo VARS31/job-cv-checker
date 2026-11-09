@@ -10,7 +10,7 @@ A "job ad and CV checker" built as a learning project for the A2A protocol and m
   - **Cover Letter Writer** (9003) – writes a cover letter from the results.
   - **Application Reviewer** (9004) – reviews the whole application like a recruiter; reports only, never rewrites.
 - **Orchestrator:** a Python program with fixed (hard-coded) routing between the agents.
-- **Models:** local by default via Ollama (`OLLAMA_URL` in `.env`); Claude Haiku optional per agent (see Constraints). The model belongs to the agent: each agent reads its model at startup and reports it in its result metadata.
+- **Models:** local by default via Ollama (`OLLAMA_URL` in `.env`); Claude optional (presets `local` (default), `haiku`, `haiku-sonnet`; see Constraints). The model belongs to the agent: each agent reads its model at startup and reports it in its result metadata.
 - **Later:** one plain HTML page as a simple front end.
 
 ## Working mode
@@ -31,7 +31,7 @@ A "job ad and CV checker" built as a learning project for the A2A protocol and m
 
 - Python 3.11.
 - Virtual environment in `.venv`.
-- **Local by default, cloud optional.** Paid APIs only as an explicit opt-in per agent (a `claude-...` model name, or `scripts/start_agents.py --preset haiku`), never as a silent fallback. Every paid call goes through the budget guard (`agents/budget.py`, limits in `.env`). Never open, print or log `ANTHROPIC_API_KEY`.
+- **Local by default, cloud optional.** Paid APIs only as an explicit opt-in per agent (a `claude-...` model name, or `--preset haiku|haiku-sonnet` in `scripts/start_agents.py` / `scripts/docker_up.py`), never as a silent fallback. Every paid call goes through the budget guard (`agents/budget.py`, limits in `.env`). Never open, print or log `ANTHROPIC_API_KEY`.
 - With a Claude model, the job ad and the CV text are sent to Anthropic. Measuring runs (model comparisons) use only the fictional demo CVs in `samples/demo/`, never a real CV.
 - Tracing is off by default (`TRACING`); recording texts (`TRACE_CONTENT`) only with the fictional demo CVs. Never put the API key into a span, the image or a log.
 - Docker is optional (`python scripts/docker_up.py`); `start_agents.py` must keep working without it. Secrets and personal files never enter the image (`.dockerignore`).

@@ -2,6 +2,7 @@
 
 Run with:  python scripts/docker_up.py                       local models (the default), no tracing
            python scripts/docker_up.py --preset haiku        Claude Haiku (the key goes in as an environment variable)
+           python scripts/docker_up.py --preset haiku-sonnet Haiku for three agents, Claude Sonnet as the Reviewer
            python scripts/docker_up.py --tracing             also start Jaeger and Phoenix; the agents send traces
            python scripts/docker_up.py --tracing --content   also record prompts, CV text and letters (demo CVs only)
            python scripts/docker_up.py --down                stop and remove the containers
@@ -74,7 +75,7 @@ def stopped_agents() -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Start the agents in Docker (optionally with the trace viewers).")
     parser.add_argument("--preset", choices=sorted(PRESETS), default="local",
-                        help="local (Ollama on the Mac, the default) or haiku (Claude, cloud, paid)")
+                        help="local (Ollama on the Mac, the default), haiku or haiku-sonnet (Claude, cloud, paid)")
     parser.add_argument("--tracing", action="store_true", help="start Jaeger and Phoenix; agents send traces")
     parser.add_argument("--content", action="store_true",
                         help="record prompts, CV text and letters in traces (only with the fictional demo CVs)")
