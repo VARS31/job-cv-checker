@@ -1,0 +1,54 @@
+{
+  "remote_policy": "hybrid",
+  "location": "Hamburg, Germany",
+  "hard_skills_required": [
+    "Python",
+    "SQL",
+    "FastAPI or Django",
+    "PostgreSQL",
+    "REST API design",
+    "LLMs",
+    "Retrieval-augmented generation (RAG)",
+    "Docker",
+    "CI/CD",
+    "AWS or Azure"
+  ],
+  "job_title": "Backend & AI Engineer (m/f/d)",
+  "min_years_experience": 3.0,
+  "hard_skills_preferred": [
+    "Kubernetes",
+    "Evaluation of LLM output"
+  ],
+  "languages": [
+    {
+      "language": "English",
+      "required": true,
+      "level": "fluent"
+    },
+    {
+      "language": "German",
+      "required": false,
+      "level": "not_stated"
+    }
+  ],
+  "responsibilities": [
+    "Build and run Python services and REST APIs",
+    "Develop LLM features, starting with RAG assistant",
+    "Measure and improve answer quality with evaluation sets",
+    "Deploy services with Docker and CI/CD to cloud",
+    "Shape new AI features with product managers and customers"
+  ],
+  "seniority": "not_stated",
+  "other_requirements_preferred": [],
+  "other_requirements": [
+    "Occasional travel to customers (about 10%)"
+  ],
+  "education_required": "Bachelor's degree in Computer Science or equivalent practical experience",
+  "experience_details": [
+    "3+ years professional experience as backend engineer"
+  ],
+  "experience_preferred": [],
+  "soft_skills": [],
+  "company": "Lumenpath Logistics",
+  "education_preferred": "not_stated"
+}

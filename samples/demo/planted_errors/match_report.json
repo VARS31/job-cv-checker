@@ -1,0 +1,104 @@
+{
+  "agent_version": "0.4.0",
+  "points": 33.0,
+  "max_points": 33.0,
+  "confirmed_by_user": [
+    {
+      "kind": "required",
+      "item": "Occasional travel to customers (about 10%)"
+    }
+  ],
+  "matched": [
+    {
+      "kind": "required",
+      "item": "Python",
+      "quote": "Backend engineer with 7 years of professional experience in Python"
+    },
+    {
+      "kind": "required",
+      "item": "SQL",
+      "quote": "Wrote SQL reports and data migrations"
+    },
+    {
+      "kind": "required",
+      "item": "FastAPI or Django",
+      "quote": "Designed and built REST APIs in Python with FastAPI and PostgreSQL"
+    },
+    {
+      "kind": "required",
+      "item": "PostgreSQL",
+      "quote": "Developed Django REST APIs and PostgreSQL databases for logistics customers"
+    },
+    {
+      "kind": "required",
+      "item": "REST API design",
+      "quote": "Designed and built REST APIs in Python with FastAPI and PostgreSQL"
+    },
+    {
+      "kind": "required",
+      "item": "LLMs",
+      "quote": "For the last three years I have built LLM features in production"
+    },
+    {
+      "kind": "required",
+      "item": "Retrieval-augmented generation (RAG)",
+      "quote": "Built a customer-facing RAG assistant over 6,000 help articles"
+    },
+    {
+      "kind": "required",
+      "item": "Docker",
+      "quote": "Containerised all services with Docker and run them on Kubernetes on AWS (EKS)"
+    },
+    {
+      "kind": "required",
+      "item": "CI/CD",
+      "quote": "deployed with GitLab CI/CD"
+    },
+    {
+      "kind": "required",
+      "item": "AWS or Azure",
+      "quote": "run them on Kubernetes on AWS (EKS)"
+    },
+    {
+      "kind": "required",
+      "item": "Bachelor's degree in Computer Science or equivalent practical experience",
+      "quote": "B.Sc. Computer Science, Example Technical University, Hamburg"
+    },
+    {
+      "kind": "required",
+      "item": "At least 3 years of professional experience",
+      "quote": "Backend engineer with 7 years of professional experience in Python"
+    },
+    {
+      "kind": "required",
+      "item": "3+ years professional experience as backend engineer",
+      "quote": "Backend engineer with 7 years of professional experience in Python"
+    },
+    {
+      "kind": "required",
+      "item": "English (fluent)",
+      "quote": "English: fluent (C2)"
+    },
+    {
+      "kind": "preferred",
+      "item": "German",
+      "quote": "German: fluent (C1)"
+    },
+    {
+      "kind": "preferred",
+      "item": "Kubernetes",
+      "quote": "run them on Kubernetes on AWS (EKS)"
+    },
+    {
+      "kind": "preferred",
+      "item": "Evaluation of LLM output",
+      "quote": "Created an evaluation set of 300 real customer questions"
+    }
+  ],
+  "unclear": [],
+  "missing": [],
+  "job_title": "Backend & AI Engineer (m/f/d)",
+  "summary": "The CV matches 100% of the requirements for Backend & AI Engineer (m/f/d) at Lumenpath Logistics. 15 of 15 required items are met, 1 of them confirmed by you. Clear matches in the CV include Python, SQL, FastAPI or Django and 11 more. No required items are missing.",
+  "company": "Lumenpath Logistics",
+  "score_percent": 100.0
+}
