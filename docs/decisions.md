@@ -86,3 +86,28 @@ Step 1 showed three gaps (see [comparison-local-vs-haiku.md](comparison-local-vs
 Nothing is decided from four runs: the presets stay as they are. A mixed set-up (Haiku agents, Sonnet Reviewer) is on the backlog as an option, as is giving the Reviewer today's date.
 
 **No refusal fallback for Sonnet.** The API can retry a refused request on another model. The adapter doesn't use that, because it would switch models silently and the budget guard prices each call by model. A refusal fails the step with a clear message instead.
+
+## 7. Docker and OpenTelemetry: optional, lean, and private by default
+
+Step 2 added a way to run the agents in containers and to see one run as one trace. Both are optional: `start_agents.py` and the plain commands work as before, and tracing is off by default. Details: [observability.md](observability.md).
+
+**Docker:**
+- **One image for all four agents** (same code, a different command per container), defined in one `docker-compose.yml`. The viewers (Jaeger, Phoenix) sit behind a `tracing` profile, so they start only when asked.
+- **Ollama stays on the Mac** (containers reach it via `host.docker.internal`), and the orchestrator stays in the terminal, because it asks the user questions.
+- **Everything is published on 127.0.0.1 only.** Inside a container an agent listens on 0.0.0.0, but its agent card keeps saying `http://localhost:<port>`.
+- **Nothing private reaches the image.**
+  - `.dockerignore` denies everything and allows only `agents/`, `prompts/` and `requirements.txt`. The image was listed after the build: no `.env`, no CVs, no results, no key.
+  - The key reaches the containers only as an environment variable at start, and only with the haiku preset.
+- **The preset is chosen at start** (`docker_up.py --preset local|haiku`, default local), with the same presets as `start_agents.py`.
+- **The budget lock had to change.** The four containers share `results/` with the Mac, but `fcntl.flock` doesn't reach across containers on Docker Desktop's file sharing (tested: two containers both got it). The guard now uses a lock file created with `O_CREAT|O_EXCL`, which is exclusive across containers and the Mac (tested), with stale-lock removal.
+
+**Tracing:**
+- **One shared setup module** (`agents/tracing.py`) for the orchestrator and all four agents. It sets the global OpenTelemetry provider on purpose, so the A2A SDK's own client and server spans are part of the trace.
+- **The trace context is passed by hand.** The SDK doesn't carry it between processes, so the orchestrator's httpx client injects it into the HTTP headers and an ASGI middleware in each agent extracts it. One run is then one trace across five services.
+- **The SDK's internal event-queue and task-manager spans are dropped** (about 240 of 319 in the first traced run); the client and server spans stay, and no kept span loses its parent.
+- **What gets spans:** a span per model call with OpenTelemetry's standard `gen_ai.*` names (model, tokens) and the cost as `llm.cost.total`, since there's no standard name for cost yet; spans for the grounding checks; and the human-in-the-loop pause on both sides (the orchestrator's wait span, and the agent's `waited_seconds`).
+- **Content needs two keys:** `TRACE_CONTENT=on` *and* the run's permission. The orchestrator gives the permission only for the fictional CVs in `samples/demo/` and passes it as W3C baggage. So an agent never records a real CV's text, even when its own switch is on. Tested end to end: with the agents' switch on but no permission, the trace had no texts at all.
+- **Never in a span:** the API key (nothing reads it; the Anthropic SDK's own tracing and trace propagation are off), and file names unless content is on.
+- **A viewer that's down costs one warning,** never the run.
+
+**Today's date** now goes into the inputs of the agents that read CVs (CV Matcher, Cover Letter Writer, Reviewer), so "09/2019 - today" is counted from the real date. The Reviewer had miscounted it in step 1.1.

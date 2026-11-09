@@ -33,5 +33,7 @@ A "job ad and CV checker" built as a learning project for the A2A protocol and m
 - Virtual environment in `.venv`.
 - **Local by default, cloud optional.** Paid APIs only as an explicit opt-in per agent (a `claude-...` model name, or `scripts/start_agents.py --preset haiku`), never as a silent fallback. Every paid call goes through the budget guard (`agents/budget.py`, limits in `.env`). Never open, print or log `ANTHROPIC_API_KEY`.
 - With a Claude model, the job ad and the CV text are sent to Anthropic. Measuring runs (model comparisons) use only the fictional demo CVs in `samples/demo/`, never a real CV.
+- Tracing is off by default (`TRACING`); recording texts (`TRACE_CONTENT`) only with the fictional demo CVs. Never put the API key into a span, the image or a log.
+- Docker is optional (`python scripts/docker_up.py`); `start_agents.py` must keep working without it. Secrets and personal files never enter the image (`.dockerignore`).
 - Agents run on ports 9001–9004.
 - All model calls go through one model-client module (`agents/model_client.py`).

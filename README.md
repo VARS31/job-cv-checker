@@ -55,6 +55,8 @@ I built it as a learning project for A2A and multi-agent design, so the code is 
 - **Orchestrator:** reads all agent cards first and stops with a clear message if one isn't running. Each step passes the earlier artifacts on to the next agent. One generic handler answers every agent's `input-required` pause: y/n for questions with ids, free text otherwise.
 - **One model client:** every model call goes through `agents/model_client.py`. The model name decides where it goes: `claude-...` to Anthropic, anything else to Ollama. It sets the JSON schema and a timeout. For Ollama it also sets the context size (8192) and the temperature, and warns when a request gets close to the context limit. For Claude it applies the budget guard. Each agent reports the model, tokens and cost in its result metadata.
 - **Prompts as files:** each agent's instructions live in `prompts/*.md`, so they can be edited without touching code. Local and Claude get the same prompts.
+- **Docker (optional):** the four agents can run in containers from one image (`python scripts/docker_up.py`). Ollama stays on the Mac, and the orchestrator stays in your terminal. See [Docker](#docker).
+- **Tracing (optional, off by default):** with `TRACING=on`, one run becomes one OpenTelemetry trace across all five processes, viewable in Jaeger and Phoenix. See [Tracing](#tracing) and [docs/observability.md](docs/observability.md).
 
 ## Models
 
@@ -111,18 +113,23 @@ orchestrator/
 agents/
   model_client.py        the only module that talks to a model (Ollama or Claude), plus the startup check
   budget.py              the budget guard for Claude calls (prices, limits, the shared spend file)
-  cv_text.py             shared: CV PDF to text, and the quote check
+  server.py              serving an agent: the A2A routes, tracing, where to listen (the same for all four)
+  tracing.py             OpenTelemetry for all five processes (off by default)
+  cv_text.py             shared: CV PDF to text, the quote check, today's date
   job_analyst/           agent 1 (port 9001): __main__.py = server + logic, schema.py = JSON shape + clean-up
   cv_matcher/            agent 2 (port 9002): __main__.py, schema.py (checklist, questions), scoring.py
   cover_letter_writer/   agent 3 (port 9003): __main__.py, schema.py (claims check, style check)
   application_reviewer/  agent 4 (port 9004): __main__.py, schema.py (rubric schema, grounding, cliché check, review.md)
 prompts/                 agent instructions (Markdown)
-scripts/                 start_agents.py (--preset local|haiku), run_all_samples.py, try_*.py for single agents
+scripts/                 start_agents.py (--preset local|haiku), docker_up.py (the same in Docker), run_all_samples.py, try_*.py
 tests/                   pytest suite: plain-Python logic only (no models, no network, no personal files)
 samples/                 put your own job ads (*.txt) and CVs (cvs/*.pdf) here; not committed
-  demo/                  fictional demo CV, job ads and scripted answers; committed
+  demo/                  fictional demo CVs, job ads and scripted answers; committed
 results/                 runs, evaluation output and the cloud spend file; not committed
-docs/                    decisions, model comparisons, backlog
+docs/                    decisions, model comparisons, observability, backlog
+Dockerfile               one image for all four agents
+docker-compose.yml       the four agents, plus Jaeger and Phoenix (profile "tracing"), all on 127.0.0.1
+.dockerignore            only agents/, prompts/ and requirements.txt reach the image
 ```
 
 ## How to run
@@ -164,6 +171,50 @@ The orchestrator prints one progress line per agent (with its model and, for Cla
   - the totals for the run.
 
 **Repeatable runs:** `--answers FILE` takes the answers from a JSON file instead of the terminal. Questions are matched by the words they contain, not by their ids, so a local run and a Haiku run get the same answers. Example and format: `samples/demo/answers_demo.json` and `orchestrator/answers.py`.
+
+### Docker
+
+The four agents can also run in containers, built from one image. Docker Desktop must be running.
+- **Ollama stays on the Mac:** the containers reach it through `host.docker.internal`.
+- **The orchestrator stays in your terminal,** because it asks you questions.
+- **`start_agents.py` still works** without Docker.
+
+```bash
+python scripts/docker_up.py                    # local models (the default)
+python scripts/docker_up.py --preset haiku     # Claude Haiku (cloud, paid)
+python -m orchestrator samples/demo/job_ad_demo.txt samples/demo/cv_jane_doe.pdf --answers samples/demo/answers_jane_doe.json
+python scripts/docker_up.py --down             # stop and remove the containers
+```
+
+- **Ports:** everything is published on `127.0.0.1` only. `docker_up.py` first checks that the ports are free and says what probably uses a busy one.
+- **Nothing private in the image:** it contains only `agents/`, `prompts/` and the packages. `.dockerignore` keeps out `.env`, CVs, your job ads, `results/` and the learning notes.
+- **The key:** `ANTHROPIC_API_KEY` reaches the containers only as an environment variable when they start, and only with `--preset haiku`.
+- **The spend file:** the four containers share `results/` with the Mac, so they all count spend in the same file.
+
+### Tracing
+
+Off by default. With tracing on, each run becomes one trace across the orchestrator and the four agents:
+- a span per pipeline step;
+- the A2A client and server spans, joined across processes;
+- a span per model call (model, tokens, cost, with OpenTelemetry's `gen_ai.*` names);
+- the grounding checks;
+- the time the run waited for your answers.
+
+```bash
+python scripts/docker_up.py --preset haiku --tracing     # also starts Jaeger and Phoenix
+TRACING=on python -m orchestrator samples/demo/job_ad_demo.txt samples/demo/cv_jane_doe.pdf --answers samples/demo/answers_jane_doe.json
+```
+
+At the end, the orchestrator prints the trace's link in each viewer: Jaeger at <http://localhost:16686>, Phoenix at <http://localhost:6006>.
+- **Viewers down:** the run still works, with one warning.
+- **Port clash:** the viewers use the same ports as the labour-law project's viewers. **Stop those first** (`docker compose --profile observability stop jaeger phoenix` in that project); `docker_up.py` tells you if a port is busy.
+
+> **Privacy switch: `TRACE_CONTENT` (off by default).** It adds the texts to the trace: prompts (with the full CV text), the letter, and your answers.
+> - Use it only with the fictional CVs in `samples/demo/`. The orchestrator refuses to run with it on and any other CV.
+> - The agents record texts only for a run the orchestrator allowed (`python scripts/docker_up.py --tracing --content`, then `TRACING=on TRACE_CONTENT=on python -m orchestrator ...`).
+> - The API key never goes into a trace.
+
+Everything about the traces, what to look at in each viewer, and how it works: [docs/observability.md](docs/observability.md).
 
 **Single agents** (for testing one agent at a time):
 
@@ -260,6 +311,8 @@ The full list with reasons is in [docs/decisions.md](docs/decisions.md). The mos
   - Adding Claude needed one module and a startup check.
   - But the API enforces the JSON shape, not array lengths, and no longer takes a temperature, so those differences had to be handled and written down.
   - Re-running the local model after the change and getting identical output was the proof that nothing else moved.
+- **Test what a lock really covers.** The budget guard's `flock` worked between processes on the Mac, but not between Docker containers sharing a folder: a small two-container test showed both getting the lock. An exclusive lock *file* (`O_CREAT|O_EXCL`) works in both places.
+- **A trace across processes needs the context passed on.** The A2A SDK makes client and server spans, but without the trace context in the HTTP headers they land in separate traces. And the SDK's internal spans (240 of 319 in the first run) hid the useful ones until they were filtered out.
 
 ## Known limitations
 
@@ -269,7 +322,7 @@ See [docs/backlog.md](docs/backlog.md) for the full list with possible fixes. Th
 - **Split alternatives:** the Job Analyst turns "such as A, B or C" into separate required items.
 - **Lost pauses:** paused tasks are lost when an agent restarts, because the task store is in memory.
 - **Narrow testing:** the prompts were tuned on 7 senior AI job ads in English, plus a small check on 3 made-up non-AI ads.
-- **Reviewer false positives and shifting verdicts:** the reviewer sometimes flags a true statement (e.g. "no SQL" when the CV lists SQL), or a stated wish as an overclaim. It doesn't know today's date, so it can miscount years "until today". With Haiku, the verdict for the same application can change between runs. Its findings are a second opinion, not facts.
+- **Reviewer false positives and shifting verdicts:** the reviewer sometimes flags a true statement (e.g. "no SQL" when the CV lists SQL), or a stated wish as an overclaim. With Haiku, the verdict for the same application can change between runs. Its findings are a second opinion, not facts.
 - **Same model family reviewing itself (with Haiku):**
   - With `--preset haiku`, the Application Reviewer is the same model family as the agents whose work it reviews, so it may share their blind spots. Locally it is a different model on purpose.
   - The grounding checks in plain Python (every quote must exist in the CV or the letter) are the independent layer.
@@ -278,3 +331,4 @@ See [docs/backlog.md](docs/backlog.md) for the full list with possible fixes. Th
     - Sonnet caught all four, at about 15 times the cost.
 - **Unchecked sentences:** the Cover Letter Writer only checks the claims the model lists itself; a factual sentence that isn't on the list is not checked.
 - **Terminal only:** the orchestrator asks its questions in the terminal; there is no web front end yet.
+- **Docker and tracing are for learning, not production:** the containers run as root, Jaeger keeps traces only in memory, and there's no sampling or authentication. Everything listens on `127.0.0.1` only.

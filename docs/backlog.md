@@ -96,10 +96,6 @@
 - **Problem:** the reviewer sometimes flags something true. In the demo run, it listed "no explicit mention of SQL" as a gap although the CV lists SQL, and flagged the candidate's own wish ("I want to build RAG assistants that real customers use") as an overclaim.
 - **Possible fix:** require each overclaim to come with a CV quote or report item that **contradicts** the sentence, checked in plain Python like the other quotes. Drop overclaims without a contradiction, and skip sentences that come from the user's own answer.
 
-### The Reviewer doesn't know today's date
-- **Problem:** CVs say "09/2019 - today". In one Haiku run the Reviewer counted that as "about six years" (it's seven) and flagged the true "seven years" as an overclaim, because the input has no date.
-- **Possible fix:** put today's date into the Reviewer's (and the CV Matcher's) input, in plain Python; or compute years of experience in plain Python.
-
 ### Verdicts vary between Haiku runs
 - **Problem:** the same strong application (Jane Doe) got shortlist, maybe, shortlist in three Haiku runs, with the same 100% score. One flagged sentence can move the verdict.
 - **Possible fix:** give the verdict a plain-Python floor from the report (e.g. no missing required items and no grounded overclaims about requirements → at least "maybe"), or run the Reviewer more than once and report the spread.
@@ -121,8 +117,8 @@
 
 ## Orchestrator and set-up
 
-### Agent ports are written in four places
-- **Problem:** each port lives in the agent's own `PORT` constant, in the `*_URL` settings in `.env` (read only by the orchestrator), in `scripts/start_agents.py`, and in the `AGENT_URL` of each `try_*` script and `run_all_samples.py`. Changing a URL in `.env` doesn't move the agent, it only makes the orchestrator look in the wrong place. (A test checks that the agents, the pipeline and `start_agents.py` agree.)
+### Agent ports are written in five places
+- **Problem:** each port lives in the agent's own `PORT` constant, in the `*_URL` settings in `.env` (read only by the orchestrator), in `scripts/start_agents.py`, in `docker-compose.yml`, and in the `AGENT_URL` of each `try_*` script and `run_all_samples.py`. Changing a URL in `.env` doesn't move the agent, it only makes the orchestrator look in the wrong place. (A test checks that the agents, the pipeline and `start_agents.py` agree.)
 - **Possible fix:** one settings source for host and port that every agent and script reads, with the defaults in one module.
 
 ### Ctrl+C during a run leaves `run_log.json` at "running"
@@ -132,3 +128,11 @@
 ### Spot-check the model-read scores
 - **Problem:** Haiku's step 1 scores and both columns after the step 1.1 fixes were drafted by Claude, not hand-scored. (The strict reading is now applied to both columns.)
 - **Next step:** spot-check the listed items in [comparison-local-vs-haiku.md](comparison-local-vs-haiku.md).
+
+### Containers run as root
+- **Problem:** the agent image has no user of its own, so the agents run as root inside their containers. They listen on 127.0.0.1 only, and nothing private is in the image, so this is acceptable for a learning project.
+- **Possible fix:** add a non-root user in the Dockerfile and check that it can still write the shared spend file in `results/`.
+
+### README screenshots of the trace viewers
+- **Problem:** the README has no picture of a trace yet. Chrome isn't installed on the Mac, the headless Chromium image tried in step 2 didn't take screenshots, and pulling a second image was blocked.
+- **Next step:** take one screenshot per viewer by hand from a printed trace link (a run with content, e.g. run C in [observability.md](observability.md)), save them as `docs/images/trace-jaeger.png` and `docs/images/trace-phoenix.png`, and link them from the README.
